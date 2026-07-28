@@ -45,39 +45,49 @@ export function setGroqApiKey(key: string) {
   }
 }
 
-async function callGroqJson<T>(messages: ChatMessage[]): Promise<T | null> {
+async function callGroqJson<T>(messages: ChatMessage[], retries = 3): Promise<T | null> {
   const apiKey = getGroqApiKey();
   if (!apiKey) return null;
 
-  try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages,
-        response_format: { type: "json_object" },
-        temperature: 0.7,
-        max_tokens: 600,
-      }),
-    });
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages,
+          response_format: { type: "json_object" },
+          temperature: 0.6,
+          max_tokens: 250,
+        }),
+      });
 
-    if (!res.ok) {
-      console.error("Groq API error:", await res.text());
-      return null;
+      if (res.status === 429) {
+        const backoffMs = Math.pow(2, attempt) * 1500 + Math.random() * 500;
+        console.warn(`Groq Rate limit hit (429). Retrying in ${Math.round(backoffMs)}ms... (Attempt ${attempt + 1}/${retries})`);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        continue;
+      }
+
+      if (!res.ok) {
+        console.error("Groq API error:", await res.text());
+        return null;
+      }
+
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) return null;
+      return JSON.parse(content) as T;
+    } catch (err) {
+      console.error("Failed to call Groq API:", err);
+      if (attempt === retries - 1) return null;
     }
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) return null;
-    return JSON.parse(content) as T;
-  } catch (err) {
-    console.error("Failed to call Groq API:", err);
-    return null;
   }
+  return null;
 }
 
 const ZONE_SYSTEM_PROMPTS: Record<string, string> = {
@@ -120,7 +130,7 @@ distractor_tiles must be 2-4 extra relevant Swedish words that don't belong in t
 
   const contextMessages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    ...history.slice(-6).map((h) => ({
+    ...history.slice(-3).map((h) => ({
       role: h.role === "npc" ? ("assistant" as const) : ("user" as const),
       content: h.text,
     })),
