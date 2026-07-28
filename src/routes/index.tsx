@@ -182,15 +182,18 @@ function MapScreen({
 
 function ZonePlay({
   zone,
+  startingFluency,
   onFinish,
   onExit,
 }: {
   zone: Zone;
+  startingFluency: number;
   onFinish: (grade: string) => void;
   onExit: () => void;
 }) {
   const [i, setI] = useState(0);
-  const [fluency, setFluency] = useState(50);
+  const [fluency, setFluency] = useState(startingFluency);
+
   const [status, setStatus] = useState<Status>("idle");
   const [cleared, setCleared] = useState(0);
   const [misses, setMisses] = useState(0);
