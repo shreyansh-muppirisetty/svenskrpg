@@ -459,9 +459,10 @@ export function storeSave(s: Save) {
 }
 
 /** A zone unlocks when the previous one has been cleared. */
-export function isUnlocked(index: number, cleared: string[]) {
-  return index === 0 || cleared.includes(ZONES[index - 1].id);
+export function isUnlocked(index: number, cleared: string[], zones: Zone[] = ZONES) {
+  return index === 0 || cleared.includes(zones[index - 1].id);
 }
+
 
 // ponytail: tiny self-check, run with `bun src/game/zones.ts`
 if (import.meta.main) {
