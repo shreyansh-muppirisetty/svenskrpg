@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const STORAGE_KEY = "svenska-quest-classroom-gemini-key";
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-2.0-flash";
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 const SYSTEM_PROMPT =
