@@ -16,6 +16,7 @@ import {
 import { fetchGameContent, DEFAULT_STARTING_FLUENCY } from "@/game/remote";
 
 import { DifficultySelector, type Difficulty } from "@/components/DifficultySelector";
+import { ClassroomMode } from "@/components/ClassroomMode";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -37,7 +38,7 @@ export const Route = createFileRoute("/")({
   component: Game,
 });
 
-type Screen = { view: "map" } | { view: "zone"; zone: Zone };
+type Screen = { view: "map" } | { view: "zone"; zone: Zone } | { view: "classroom" };
 
 function Game() {
   const [screen, setScreen] = useState<Screen>({ view: "map" });
@@ -69,11 +70,13 @@ function Game() {
           <p className="text-muted-foreground">
             {screen.view === "map"
               ? "Grammatiken är spelet. Välj en zon."
+              : screen.view === "classroom"
+              ? "Klassrumsläge · Läraren"
               : `${screen.zone.name} · ${screen.zone.npc}`}
           </p>
         </div>
         <div className="flex gap-2">
-          {screen.view === "zone" && (
+          {screen.view !== "map" && (
             <button
               onClick={() => setScreen({ view: "map" })}
               className="rounded-sm border-2 border-border bg-card px-3 py-2 font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
@@ -98,8 +101,11 @@ function Game() {
             save={save}
             onPick={(zone) => setScreen({ view: "zone", zone })}
             onWipe={() => persist({ cleared: [], grades: {} })}
+            onClassroom={() => setScreen({ view: "classroom" })}
           />
         </div>
+      ) : screen.view === "classroom" ? (
+        <ClassroomMode onExit={() => setScreen({ view: "map" })} />
       ) : (
         <ZonePlay
           key={screen.zone.id}
@@ -127,11 +133,13 @@ function MapScreen({
   save,
   onPick,
   onWipe,
+  onClassroom,
 }: {
   zones: Zone[];
   save: Save;
   onPick: (z: Zone) => void;
   onWipe: () => void;
+  onClassroom: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -180,6 +188,21 @@ function MapScreen({
           nollställ progress
         </button>
       )}
+
+      <button
+        onClick={onClassroom}
+        className="pixel-panel flex items-center gap-4 rounded-sm bg-card p-4 text-left transition-transform active:translate-y-0.5"
+      >
+        <span className="font-pixel text-[10px] text-muted-foreground">✦</span>
+        <span className="flex-1">
+          <span className="flex items-center gap-2">
+            <span className="block font-pixel text-[11px] text-foreground">Klassrumsläge</span>
+            <span className="rounded-sm bg-accent px-1.5 py-0.5 font-pixel text-[7px] text-accent-foreground">BETA</span>
+          </span>
+          <span className="block text-lg text-muted-foreground">Chatta fritt med Läraren på svenska.</span>
+        </span>
+        <span className="font-pixel text-xl text-accent-foreground">→</span>
+      </button>
     </div>
   );
 }
