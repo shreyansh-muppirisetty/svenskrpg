@@ -74,40 +74,93 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --radius: 0.25rem;
+  /* Cozy Swedish schoolroom: warm sand paper, chalkboard green, flag blue + yellow */
+  --background: oklch(0.955 0.022 85);
+  --foreground: oklch(0.26 0.035 55);
+  --card: oklch(0.982 0.014 88);
+  --card-foreground: oklch(0.26 0.035 55);
+  --popover: oklch(0.982 0.014 88);
+  --popover-foreground: oklch(0.26 0.035 55);
+  --primary: oklch(0.46 0.13 245);
+  --primary-foreground: oklch(0.98 0.015 88);
+  --secondary: oklch(0.88 0.045 85);
+  --secondary-foreground: oklch(0.3 0.04 55);
+  --muted: oklch(0.9 0.03 85);
+  --muted-foreground: oklch(0.48 0.035 60);
+  --accent: oklch(0.83 0.16 88);
+  --accent-foreground: oklch(0.26 0.05 60);
+  --destructive: oklch(0.55 0.19 27);
+  --destructive-foreground: oklch(0.98 0.01 88);
+  --border: oklch(0.76 0.04 70);
+  --input: oklch(0.76 0.04 70);
+  --ring: oklch(0.46 0.13 245);
+  --chalk: oklch(0.32 0.045 155);
+  --chalk-foreground: oklch(0.94 0.02 120);
+  --tile: oklch(0.93 0.035 88);
+  --tile-foreground: oklch(0.28 0.04 55);
+  --success: oklch(0.6 0.15 150);
+  --success-foreground: oklch(0.98 0.01 88);
+  --warn: oklch(0.72 0.17 60);
+  --pixel-shadow: oklch(0.35 0.05 60 / 45%);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --sidebar: oklch(0.93 0.03 85);
+  --sidebar-foreground: oklch(0.26 0.035 55);
+  --sidebar-primary: oklch(0.46 0.13 245);
+  --sidebar-primary-foreground: oklch(0.98 0.015 88);
+  --sidebar-accent: oklch(0.83 0.16 88);
+  --sidebar-accent-foreground: oklch(0.26 0.05 60);
+  --sidebar-border: oklch(0.76 0.04 70);
+  --sidebar-ring: oklch(0.46 0.13 245);
 }
+
+@keyframes shake-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@utility animate-shake {
+  animation: shake-x 0.35s ease-in-out;
+}
+
+@utility animate-pop {
+  animation: pop-in 0.25s ease-out;
+}
+
+@utility pixel-panel {
+  border: 3px solid var(--color-border);
+  box-shadow: var(--shadow-pixel);
+}
+
 
 .dark {
   --background: oklch(0.129 0.042 264.695);
