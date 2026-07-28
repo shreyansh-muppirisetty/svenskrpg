@@ -22,8 +22,48 @@ export type ChatMessage = {
   content: string;
 };
 
+export type Provider = "gemini" | "groq";
+
+export const AI_PROVIDER_KEY = "svenska-quest-ai-provider";
+export const GEMINI_KEY_STORAGE = "svenska-quest-gemini-key";
+
+export function getAiProvider(): Provider {
+  try {
+    return (localStorage.getItem(AI_PROVIDER_KEY) as Provider) || "gemini";
+  } catch {
+    return "gemini";
+  }
+}
+
+export function setAiProvider(provider: Provider) {
+  try {
+    localStorage.setItem(AI_PROVIDER_KEY, provider);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function getGeminiApiKey(): string | null {
+  try {
+    const local = localStorage.getItem(GEMINI_KEY_STORAGE);
+    if (local && local.trim()) return local.trim();
+    return import.meta.env.VITE_GEMINI_API_KEY || null;
+  } catch {
+    return null;
+  }
+}
+
+export function setGeminiApiKey(key: string) {
+  try {
+    if (key.trim()) localStorage.setItem(GEMINI_KEY_STORAGE, key.trim());
+    else localStorage.removeItem(GEMINI_KEY_STORAGE);
+  } catch {
+    /* ignore */
+  }
+}
+
 export const GROQ_MODEL_KEY = "svenska-quest-groq-model";
-export const DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"; // 131k TPM vs 12k TPM on 70b
+export const DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant";
 
 export function getGroqModel(): string {
   try {
@@ -59,6 +99,47 @@ export function setGroqApiKey(key: string) {
     else localStorage.removeItem(GROQ_KEY_STORAGE);
   } catch {
     /* ignore */
+  }
+}
+
+async function callGeminiJson<T>(messages: ChatMessage[]): Promise<T | null> {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) return null;
+
+  try {
+    const contents = messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents,
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.7,
+            maxOutputTokens: 400,
+          },
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      console.error("Gemini API error:", await res.text());
+      return null;
+    }
+
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+    return JSON.parse(text) as T;
+  } catch (err) {
+    console.error("Failed to call Gemini API:", err);
+    return null;
   }
 }
 
@@ -107,6 +188,14 @@ async function callGroqJson<T>(messages: ChatMessage[], retries = 3): Promise<T 
   return null;
 }
 
+async function callAiJson<T>(messages: ChatMessage[]): Promise<T | null> {
+  const provider = getAiProvider();
+  if (provider === "gemini") {
+    return callGeminiJson<T>(messages);
+  }
+  return callGroqJson<T>(messages);
+}
+
 const ZONE_SYSTEM_PROMPTS: Record<string, string> = {
   klassrummet:
     "You are Fröken Grammatik, a strict but encouraging Swedish grammar teacher in a classroom setting. You drill V2 word order and question structure (Frågeordföljd). Always speak in clear, simple Swedish suited for beginners.",
@@ -153,7 +242,7 @@ distractor_tiles must be 2-4 extra relevant Swedish words that don't belong in t
     })),
   ];
 
-  return callGroqJson<NpcTurn>(contextMessages);
+  return callAiJson<NpcTurn>(contextMessages);
 }
 
 /**
@@ -189,5 +278,5 @@ Return ONLY a JSON object matching this exact schema:
     { role: "user", content: userAnswer },
   ];
 
-  return callGroqJson<EvaluationResult>(messages);
+  return callAiJson<EvaluationResult>(messages);
 }
