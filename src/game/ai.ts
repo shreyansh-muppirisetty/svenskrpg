@@ -106,41 +106,46 @@ async function callGeminiJson<T>(messages: ChatMessage[]): Promise<T | null> {
   const apiKey = getGeminiApiKey();
   if (!apiKey) return null;
 
-  try {
-    const contents = messages.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"];
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents,
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.7,
-            maxOutputTokens: 400,
-          },
-        }),
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents,
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.7,
+              maxOutputTokens: 400,
+            },
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`Gemini model ${model} failed (${res.status}):`, errText);
+        continue;
       }
-    );
 
-    if (!res.ok) {
-      console.error("Gemini API error:", await res.text());
-      return null;
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) continue;
+      return JSON.parse(text) as T;
+    } catch (err) {
+      console.error(`Error with Gemini model ${model}:`, err);
     }
-
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return null;
-    return JSON.parse(text) as T;
-  } catch (err) {
-    console.error("Failed to call Gemini API:", err);
-    return null;
   }
+  return null;
 }
 
 async function callGroqJson<T>(messages: ChatMessage[], retries = 3): Promise<T | null> {
