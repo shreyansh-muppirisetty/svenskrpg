@@ -16,6 +16,9 @@ import {
 import { fetchGameContent, DEFAULT_STARTING_FLUENCY } from "@/game/remote";
 
 
+import { DifficultySelector, type Difficulty } from "@/components/DifficultySelector";
+import { AiZonePlay } from "@/components/AiZonePlay";
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -36,12 +39,12 @@ export const Route = createFileRoute("/")({
   component: Game,
 });
 
-type Status = "idle" | "wrong" | "right";
 type Screen = { view: "map" } | { view: "zone"; zone: Zone };
 
 function Game() {
   const [screen, setScreen] = useState<Screen>({ view: "map" });
   const [save, setSave] = useState<Save>({ cleared: [], grades: {} });
+  const [difficulty, setDifficulty] = useState<Difficulty>("easy");
 
   const { data } = useQuery({
     queryKey: ["game-content"],
@@ -90,16 +93,20 @@ function Game() {
       </header>
 
       {screen.view === "map" ? (
-        <MapScreen
-          zones={zones}
-          save={save}
-          onPick={(zone) => setScreen({ view: "zone", zone })}
-          onWipe={() => persist({ cleared: [], grades: {} })}
-        />
+        <div className="flex flex-col gap-4">
+          <DifficultySelector current={difficulty} onChange={setDifficulty} />
+          <MapScreen
+            zones={zones}
+            save={save}
+            onPick={(zone) => setScreen({ view: "zone", zone })}
+            onWipe={() => persist({ cleared: [], grades: {} })}
+          />
+        </div>
       ) : (
-        <ZonePlay
+        <AiZonePlay
           key={screen.zone.id}
           zone={screen.zone}
+          difficulty={difficulty}
           startingFluency={startingFluency}
           onFinish={(grade) =>
             persist({
