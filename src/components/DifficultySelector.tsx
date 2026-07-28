@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getGroqApiKey, setGroqApiKey } from "@/game/ai";
+import { getGroqApiKey, setGroqApiKey, getGroqModel, setGroqModel } from "@/game/ai";
 
 export type Difficulty = "easy" | "medium" | "hard";
 
@@ -10,6 +10,7 @@ type Props = {
 
 export function DifficultySelector({ current, onChange }: Props) {
   const [apiKey, setApiKey] = useState("");
+  const [selectedModel, setSelectedModel] = useState("llama-3.1-8b-instant");
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [hasKey, setHasKey] = useState(false);
 
@@ -17,12 +18,18 @@ export function DifficultySelector({ current, onChange }: Props) {
     const k = getGroqApiKey() ?? "";
     setApiKey(k);
     setHasKey(!!k);
+    setSelectedModel(getGroqModel());
   }, []);
 
   function handleSaveKey() {
     setGroqApiKey(apiKey);
     setHasKey(!!apiKey.trim());
     setShowKeyInput(false);
+  }
+
+  function handleModelChange(m: string) {
+    setSelectedModel(m);
+    setGroqModel(m);
   }
 
   const options: { id: Difficulty; label: string; desc: string }[] = [
@@ -51,20 +58,33 @@ export function DifficultySelector({ current, onChange }: Props) {
         </div>
 
         {showKeyInput && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Klistra in din Groq API Key (gsk_...)"
-              className="flex-1 rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-ring"
-            />
-            <button
-              onClick={handleSaveKey}
-              className="rounded-sm border-2 border-border bg-primary px-3 py-2 font-pixel text-[9px] text-primary-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
-            >
-              SPARA I WEBBLÄSAREN
-            </button>
+          <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Klistra in din Groq API Key (gsk_...)"
+                className="flex-1 rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-ring"
+              />
+              <button
+                onClick={handleSaveKey}
+                className="rounded-sm border-2 border-border bg-primary px-3 py-2 font-pixel text-[9px] text-primary-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
+              >
+                SPARA I WEBBLÄSAREN
+              </button>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="font-pixel text-[8px] text-muted-foreground">MODELL:</span>
+              <select
+                value={selectedModel}
+                onChange={(e) => handleModelChange(e.target.value)}
+                className="rounded-sm border-2 border-border bg-secondary/50 px-2 py-1 font-pixel text-[9px] outline-none"
+              >
+                <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Snabb + 131k TPM gräns - Rekommenderas)</option>
+                <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Smartare + 12k TPM stram gräns)</option>
+              </select>
+            </div>
           </div>
         )}
       </div>

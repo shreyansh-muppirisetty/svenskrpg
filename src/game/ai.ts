@@ -22,7 +22,24 @@ export type ChatMessage = {
   content: string;
 };
 
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+export const GROQ_MODEL_KEY = "svenska-quest-groq-model";
+export const DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"; // 131k TPM vs 12k TPM on 70b
+
+export function getGroqModel(): string {
+  try {
+    return localStorage.getItem(GROQ_MODEL_KEY) || DEFAULT_GROQ_MODEL;
+  } catch {
+    return DEFAULT_GROQ_MODEL;
+  }
+}
+
+export function setGroqModel(model: string) {
+  try {
+    localStorage.setItem(GROQ_MODEL_KEY, model);
+  } catch {
+    /* ignore */
+  }
+}
 
 export const GROQ_KEY_STORAGE = "svenska-quest-groq-key";
 
@@ -58,7 +75,7 @@ async function callGroqJson<T>(messages: ChatMessage[], retries = 3): Promise<T 
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: GROQ_MODEL,
+          model: getGroqModel(),
           messages,
           response_format: { type: "json_object" },
           temperature: 0.6,
