@@ -27,3 +27,6 @@ npm run dev
 - TypeScript
 - React
 - Tailwind CSS
+
+<!-- Test commit for Lovable integration sync -->
+
