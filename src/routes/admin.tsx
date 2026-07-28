@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ZoneRow } from "@/game/remote";
 import { DEFAULT_STARTING_FLUENCY } from "@/game/remote";
+import { ADMIN_UNLOCK_KEY } from "@/game/zones";
 
 export const Route = createFileRoute("/admin")({
   ssr: false,
@@ -65,6 +66,23 @@ function Admin() {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [editing, setEditing] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [unlockAll, setUnlockAll] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(ADMIN_UNLOCK_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  function toggleUnlockAll(val: boolean) {
+    setUnlockAll(val);
+    try {
+      if (val) localStorage.setItem(ADMIN_UNLOCK_KEY, "true");
+      else localStorage.removeItem(ADMIN_UNLOCK_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
 
   const refresh = useCallback(async () => {
     const [z, s] = await Promise.all([
@@ -221,25 +239,43 @@ function Admin() {
       ) : (
         <>
           <section className="pixel-panel rounded-sm bg-card p-5">
-            <h2 className="font-pixel text-[11px]">STARTFLYT</h2>
+            <h2 className="font-pixel text-[11px]">ADMIN-INSTÄLLNINGAR</h2>
             <p className="mt-1 text-lg text-muted-foreground">
-              Flytet spelare börjar varje zon med (1–100).
+              Välj om alla zoner ska låsas upp direkt utan att behöva klara tidigare zoner.
             </p>
-            <div className="mt-3 flex items-center gap-3">
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={fluency}
-                onChange={(e) => setFluency(Number(e.target.value))}
-                className="w-28 rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-xl outline-none focus:border-ring"
-              />
-              <button
-                onClick={saveSettings}
-                className="rounded-sm border-2 border-border bg-primary px-4 py-2 font-pixel text-[10px] text-primary-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
-              >
-                SPARA
-              </button>
+            <div className="mt-4 flex flex-col gap-4">
+              <label className="flex items-center gap-3 text-xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={unlockAll}
+                  onChange={(e) => toggleUnlockAll(e.target.checked)}
+                  className="h-5 w-5 accent-primary"
+                />
+                <span>Lås upp alla zoner för admin / alla spelare på denna enhet</span>
+              </label>
+              
+              <div className="border-t border-border pt-4">
+                <span className="font-pixel text-[10px] block mb-1">STARTFLYT</span>
+                <p className="text-lg text-muted-foreground mb-2">
+                  Flytet spelare börjar varje zon med (1–100).
+                </p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={fluency}
+                    onChange={(e) => setFluency(Number(e.target.value))}
+                    className="w-28 rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-xl outline-none focus:border-ring"
+                  />
+                  <button
+                    onClick={saveSettings}
+                    className="rounded-sm border-2 border-border bg-primary px-4 py-2 font-pixel text-[10px] text-primary-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
+                  >
+                    SPARA
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 

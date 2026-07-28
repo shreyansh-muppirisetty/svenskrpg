@@ -458,8 +458,19 @@ export function storeSave(s: Save) {
   }
 }
 
-/** A zone unlocks when the previous one has been cleared. */
-export function isUnlocked(index: number, cleared: string[], zones: Zone[] = ZONES) {
+export const ADMIN_UNLOCK_KEY = "svenska-quest-admin-unlock-all";
+
+export function isAdminUnlocked(): boolean {
+  try {
+    return localStorage.getItem(ADMIN_UNLOCK_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** A zone unlocks when the previous one has been cleared or if admin unlock is enabled. */
+export function isUnlocked(index: number, cleared: string[], zones: Zone[] = ZONES, adminUnlockOverride?: boolean) {
+  if (adminUnlockOverride ?? isAdminUnlocked()) return true;
   return index === 0 || cleared.includes(zones[index - 1].id);
 }
 
