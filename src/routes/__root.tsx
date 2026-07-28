@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Svenska Quest — Grammar Is the Game" },
+      { name: "description", content: "A pixel-art RPG where Swedish grammar gates the story: five zones, V2 word order, en/ett, modals and subordinate clauses — under time pressure." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Svenska Quest — Grammar Is the Game" },
+      { property: "og:description", content: "A pixel-art RPG where Swedish grammar gates the story: five zones, V2 word order, en/ett, modals and subordinate clauses — under time pressure." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Svenska Quest — Grammar Is the Game" },
+      { name: "twitter:description", content: "A pixel-art RPG where Swedish grammar gates the story: five zones, V2 word order, en/ett, modals and subordinate clauses — under time pressure." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/26216f67-7948-4cbe-81ab-026bac63b4c3/id-preview-e6d445e8--46ddf643-625d-4749-b2b8-b53b644b2900.lovable.app-1785228031449.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/26216f67-7948-4cbe-81ab-026bac63b4c3/id-preview-e6d445e8--46ddf643-625d-4749-b2b8-b53b644b2900.lovable.app-1785228031449.png" },
     ],
     links: [
       {

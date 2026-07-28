@@ -29,7 +29,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Classroom, canteen, corridor, shop, party. Every door needs correct Swedish. Keep your fluency bar alive.",
+          "A pixel-art RPG where Swedish grammar gates the story: five zones, V2 word order, en/ett, modals and subordinate clauses — under time pressure.",
       },
     ],
   }),
