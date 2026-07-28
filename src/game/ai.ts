@@ -114,35 +114,45 @@ async function callGeminiJson<T>(messages: ChatMessage[]): Promise<T | null> {
   }));
 
   for (const model of models) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents,
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.7,
-              maxOutputTokens: 400,
-            },
-          }),
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents,
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.7,
+                maxOutputTokens: 400,
+              },
+            }),
+          }
+        );
+
+        if (res.status === 429) {
+          const backoffMs = Math.pow(2, attempt) * 1500 + Math.random() * 500;
+          console.warn(`Gemini model ${model} rate limited. Retrying in ${Math.round(backoffMs)}ms... (Attempt ${attempt + 1}/3)`);
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
         }
-      );
 
-      if (!res.ok) {
-        const errText = await res.text();
-        console.warn(`Gemini model ${model} failed (${res.status}):`, errText);
-        continue;
+        if (!res.ok) {
+          const errText = await res.text();
+          console.warn(`Gemini model ${model} failed (${res.status}):`, errText);
+          break; // try next model
+        }
+
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) break;
+        return JSON.parse(text) as T;
+      } catch (err) {
+        console.error(`Error with Gemini model ${model}:`, err);
+        break;
       }
-
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) continue;
-      return JSON.parse(text) as T;
-    } catch (err) {
-      console.error(`Error with Gemini model ${model}:`, err);
     }
   }
   return null;
