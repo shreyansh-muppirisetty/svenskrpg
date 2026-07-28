@@ -102,9 +102,21 @@ export function setGroqApiKey(key: string) {
   }
 }
 
+// Throttle Gemini to ~10 RPM to avoid 429s on free tier
+let _lastGeminiCall = 0;
+async function geminiThrottle() {
+  const MIN_GAP = 6000;
+  const now = Date.now();
+  const wait = MIN_GAP - (now - _lastGeminiCall);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  _lastGeminiCall = Date.now();
+}
+
 async function callGeminiJson<T>(messages: ChatMessage[]): Promise<T | null> {
   const apiKey = getGeminiApiKey();
   if (!apiKey) return null;
+
+  await geminiThrottle();
 
   const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-exp"];
 
