@@ -24,16 +24,29 @@ export type ChatMessage = {
 
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
-function getApiKey(): string | null {
+export const GROQ_KEY_STORAGE = "svenska-quest-groq-key";
+
+export function getGroqApiKey(): string | null {
   try {
+    const local = localStorage.getItem(GROQ_KEY_STORAGE);
+    if (local && local.trim()) return local.trim();
     return import.meta.env.VITE_GROQ_API_KEY || null;
   } catch {
     return null;
   }
 }
 
+export function setGroqApiKey(key: string) {
+  try {
+    if (key.trim()) localStorage.setItem(GROQ_KEY_STORAGE, key.trim());
+    else localStorage.removeItem(GROQ_KEY_STORAGE);
+  } catch {
+    /* ignore */
+  }
+}
+
 async function callGroqJson<T>(messages: ChatMessage[]): Promise<T | null> {
-  const apiKey = getApiKey();
+  const apiKey = getGroqApiKey();
   if (!apiKey) return null;
 
   try {
