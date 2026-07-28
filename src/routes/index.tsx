@@ -1,21 +1,32 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CHALLENGES, isCorrect, tilesFor, gradeFor } from "@/game/classroom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ZONES,
+  RULE_LABEL,
+  isCorrect,
+  tilesFor,
+  gradeFor,
+  loadSave,
+  storeSave,
+  isUnlocked,
+  type Zone,
+  type Save,
+} from "@/game/zones";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Svenska Quest — Classroom Demo" },
+      { title: "Svenska Quest — Grammar Is the Game" },
       {
         name: "description",
         content:
-          "A pixel-art RPG demo where Swedish grammar is the game: build V2 sentences, ask questions, and fill the fluency bar before Fröken Grammatik loses patience.",
+          "A pixel-art RPG where Swedish grammar gates the story: five zones, V2 word order, en/ett, modals and subordinate clauses — under time pressure.",
       },
-      { property: "og:title", content: "Svenska Quest — Classroom Demo" },
+      { property: "og:title", content: "Svenska Quest — Grammar Is the Game" },
       {
         property: "og:description",
         content:
-          "Type and arrange Swedish sentences to survive your first lesson. Grammar gates the story.",
+          "Classroom, canteen, corridor, shop, party. Every door needs correct Swedish. Keep your fluency bar alive.",
       },
     ],
   }),
@@ -23,8 +34,137 @@ export const Route = createFileRoute("/")({
 });
 
 type Status = "idle" | "wrong" | "right";
+type Screen = { view: "map" } | { view: "zone"; zone: Zone };
 
 function Game() {
+  const [screen, setScreen] = useState<Screen>({ view: "map" });
+  const [save, setSave] = useState<Save>({ cleared: [], grades: {} });
+
+  useEffect(() => setSave(loadSave()), []);
+
+  const persist = useCallback((s: Save) => {
+    setSave(s);
+    storeSave(s);
+  }, []);
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-5 px-4 py-8">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-pixel text-lg leading-relaxed text-primary sm:text-2xl">
+            SVENSKA QUEST
+          </h1>
+          <p className="text-muted-foreground">
+            {screen.view === "map"
+              ? "Grammatiken är spelet. Välj en zon."
+              : `${screen.zone.name} · ${screen.zone.npc}`}
+          </p>
+        </div>
+        {screen.view === "zone" && (
+          <button
+            onClick={() => setScreen({ view: "map" })}
+            className="rounded-sm border-2 border-border bg-card px-3 py-2 font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
+          >
+            KARTAN
+          </button>
+        )}
+      </header>
+
+      {screen.view === "map" ? (
+        <MapScreen
+          save={save}
+          onPick={(zone) => setScreen({ view: "zone", zone })}
+          onWipe={() => persist({ cleared: [], grades: {} })}
+        />
+      ) : (
+        <ZonePlay
+          key={screen.zone.id}
+          zone={screen.zone}
+          onFinish={(grade) =>
+            persist({
+              cleared: Array.from(new Set([...save.cleared, screen.zone.id])),
+              grades: { ...save.grades, [screen.zone.id]: grade },
+            })
+          }
+          onExit={() => setScreen({ view: "map" })}
+        />
+      )}
+
+      <footer className="mt-auto pt-4 font-pixel text-[9px] leading-relaxed text-muted-foreground">
+        5 zoner · frågor · V2 · en/ett · modalverb · bisatser · flyt & betyg
+      </footer>
+    </main>
+  );
+}
+
+function MapScreen({
+  save,
+  onPick,
+  onWipe,
+}: {
+  save: Save;
+  onPick: (z: Zone) => void;
+  onWipe: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <section className="pixel-panel rounded-sm bg-chalk p-5 text-chalk-foreground">
+        <p className="text-2xl leading-snug">
+          Du är ny i skolan. Ingen byter till engelska. Varje dörr kräver rätt ordföljd.
+        </p>
+      </section>
+
+      {ZONES.map((z, idx) => {
+        const unlocked = isUnlocked(idx, save.cleared);
+        const grade = save.grades[z.id];
+        return (
+          <button
+            key={z.id}
+            disabled={!unlocked}
+            onClick={() => onPick(z)}
+            className={`pixel-panel flex items-center gap-4 rounded-sm bg-card p-4 text-left transition-transform ${
+              unlocked
+                ? "active:translate-y-0.5"
+                : "cursor-not-allowed opacity-50 grayscale"
+            }`}
+          >
+            <span className="font-pixel text-[10px] text-muted-foreground">{idx + 1}</span>
+            <span className="flex-1">
+              <span className="block font-pixel text-[11px] text-foreground">{z.name}</span>
+              <span className="block text-lg text-muted-foreground">{z.blurb}</span>
+              <span className="block font-pixel text-[9px] text-muted-foreground">
+                {z.challenges.length} repliker ·{" "}
+                {z.timeLimit ? `${z.timeLimit}s per replik` : "ingen tidspress"}
+              </span>
+            </span>
+            <span className="font-pixel text-xl text-accent-foreground">
+              {grade ?? (unlocked ? "–" : "🔒")}
+            </span>
+          </button>
+        );
+      })}
+
+      {save.cleared.length > 0 && (
+        <button
+          onClick={onWipe}
+          className="self-start font-pixel text-[9px] text-muted-foreground underline underline-offset-4"
+        >
+          nollställ progress
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ZonePlay({
+  zone,
+  onFinish,
+  onExit,
+}: {
+  zone: Zone;
+  onFinish: (grade: string) => void;
+  onExit: () => void;
+}) {
   const [i, setI] = useState(0);
   const [fluency, setFluency] = useState(50);
   const [status, setStatus] = useState<Status>("idle");
@@ -33,18 +173,19 @@ function Game() {
   const [text, setText] = useState("");
   const [slots, setSlots] = useState<string[]>([]);
   const [showSubs, setShowSubs] = useState(true);
-  const [done, setDone] = useState(false);
+  const [left, setLeft] = useState(zone.timeLimit);
+  const [ended, setEnded] = useState<null | "won" | "lost">(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const c = CHALLENGES[i];
+  const c = zone.challenges[i];
   const bank = useMemo(() => tilesFor(c, i + 1), [c, i]);
   const remaining = useMemo(() => {
-    const left = [...bank];
+    const rest = [...bank];
     slots.forEach((w) => {
-      const idx = left.indexOf(w);
-      if (idx > -1) left.splice(idx, 1);
+      const idx = rest.indexOf(w);
+      if (idx > -1) rest.splice(idx, 1);
     });
-    return left;
+    return rest;
   }, [bank, slots]);
 
   // Subtitles fade after 3s — you have to actually read fast.
@@ -54,17 +195,44 @@ function Game() {
     return () => clearTimeout(t);
   }, [i]);
 
+  const penalise = useCallback((amount: number) => {
+    setMisses((n) => n + 1);
+    setFluency((f) => {
+      const next = Math.max(0, f - amount);
+      if (next === 0) setEnded("lost");
+      return next;
+    });
+  }, []);
+
+  // Timed zones: running out of time counts as a miss and moves you on.
+  useEffect(() => {
+    if (!zone.timeLimit || ended || status === "right") return;
+    setLeft(zone.timeLimit);
+    const t = setInterval(() => {
+      setLeft((s) => {
+        if (s > 1) return s - 1;
+        clearInterval(t);
+        setStatus("wrong");
+        penalise(12);
+        setTimeout(() => setStatus("idle"), 400);
+        return 0;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [i, zone.timeLimit, ended, status, penalise]);
+
   const answer = c.mode === "tiles" ? slots.join(" ") : text;
 
   function submit() {
-    if (!answer.trim() || done) return;
+    if (!answer.trim() || ended || status === "right") return;
     if (isCorrect(answer, c)) {
       setStatus("right");
       setFluency((f) => Math.min(100, f + 12));
       setCleared((n) => n + 1);
       setTimeout(() => {
-        if (i + 1 >= CHALLENGES.length) {
-          setDone(true);
+        if (i + 1 >= zone.challenges.length) {
+          setEnded("won");
+          onFinish(gradeFor(cleared + 1, zone.challenges.length));
         } else {
           setI(i + 1);
           setText("");
@@ -72,16 +240,15 @@ function Game() {
           setStatus("idle");
           inputRef.current?.focus();
         }
-      }, 1200);
+      }, 1100);
     } else {
       setStatus("wrong");
-      setMisses((n) => n + 1);
-      setFluency((f) => Math.max(0, f - 9));
+      penalise(9);
       setTimeout(() => setStatus("idle"), 400);
     }
   }
 
-  function reset() {
+  function retry() {
     setI(0);
     setFluency(50);
     setCleared(0);
@@ -89,135 +256,128 @@ function Game() {
     setText("");
     setSlots([]);
     setStatus("idle");
-    setDone(false);
+    setEnded(null);
+    setLeft(zone.timeLimit);
   }
 
-  const grade = gradeFor(cleared, CHALLENGES.length);
+  const grade = gradeFor(cleared, zone.challenges.length);
+
+  if (ended) {
+    return (
+      <ZoneEnd
+        zone={zone}
+        won={ended === "won"}
+        grade={grade}
+        misses={misses}
+        fluency={fluency}
+        onRetry={retry}
+        onExit={onExit}
+      />
+    );
+  }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-5 px-4 py-8">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-pixel text-lg leading-relaxed text-primary sm:text-2xl">
-            SVENSKA QUEST
-          </h1>
-          <p className="text-muted-foreground">Zone 1 · Klassrummet · Fröken Grammatik</p>
-        </div>
-        <div className="pixel-panel rounded-sm bg-card px-3 py-2 text-center">
-          <div className="font-pixel text-[9px] text-muted-foreground">BETYG</div>
-          <div className="font-pixel text-xl text-accent-foreground">{grade}</div>
-        </div>
-      </header>
-
+    <>
       <FluencyBar value={fluency} />
 
-      {done ? (
-        <Ending
-          grade={grade}
-          misses={misses}
-          fluency={fluency}
-          total={CHALLENGES.length}
-          onReset={reset}
-        />
-      ) : (
-        <>
-          <section className="pixel-panel relative rounded-sm bg-chalk p-5 text-chalk-foreground">
-            <div className="absolute -top-3 left-4 font-pixel text-[9px] text-accent-foreground">
-              <span className="rounded-sm bg-accent px-2 py-1">
-                {c.rule === "v2" ? "V2-REGELN" : "FRÅGOR"}
-              </span>
-            </div>
-            <p className="mt-2 text-2xl leading-snug">{c.npc}</p>
-            <p
-              className={`mt-2 text-base italic transition-opacity duration-700 ${
-                showSubs ? "opacity-70" : "opacity-0"
-              }`}
-            >
-              {c.task}
-            </p>
-            <button
-              onClick={() => setShowSubs(true)}
-              className="mt-3 font-pixel text-[9px] text-chalk-foreground/60 underline underline-offset-4 hover:text-chalk-foreground"
-            >
-              visa igen
-            </button>
-          </section>
-
-          <section
-            className={`pixel-panel rounded-sm bg-card p-4 ${status === "wrong" ? "animate-shake" : ""}`}
+      <section className="pixel-panel relative rounded-sm bg-chalk p-5 text-chalk-foreground">
+        <div className="absolute -top-3 left-4 font-pixel text-[9px] text-accent-foreground">
+          <span className="rounded-sm bg-accent px-2 py-1">{RULE_LABEL[c.rule]}</span>
+        </div>
+        {zone.timeLimit > 0 && (
+          <div
+            className={`absolute -top-3 right-4 rounded-sm px-2 py-1 font-pixel text-[9px] ${
+              left <= 4 ? "bg-destructive text-destructive-foreground" : "bg-card text-foreground"
+            }`}
           >
-            {c.mode === "tiles" ? (
-              <>
-                <div className="mb-3 flex min-h-16 flex-wrap items-center gap-2 rounded-sm border-2 border-dashed border-border bg-secondary/60 p-3">
-                  {slots.length === 0 && (
-                    <span className="text-muted-foreground">Klicka på orden i rätt ordning…</span>
-                  )}
-                  {slots.map((w, idx) => (
-                    <Tile
-                      key={`${w}-${idx}`}
-                      word={w}
-                      tone={status}
-                      slotIndex={idx}
-                      onClick={() => setSlots(slots.filter((_, k) => k !== idx))}
-                    />
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {remaining.map((w, idx) => (
-                    <Tile key={`${w}-bank-${idx}`} word={w} onClick={() => setSlots([...slots, w])} />
-                  ))}
-                </div>
-              </>
-            ) : (
-              <input
-                ref={inputRef}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submit()}
-                placeholder="Skriv på svenska…"
-                autoComplete="off"
-                className="w-full rounded-sm border-2 border-border bg-secondary/50 px-3 py-3 text-2xl outline-none focus:border-ring"
-              />
-            )}
+            {left}s
+          </div>
+        )}
+        <p className="mt-2 text-2xl leading-snug">{c.npc}</p>
+        <p
+          className={`mt-2 text-base italic transition-opacity duration-700 ${
+            showSubs ? "opacity-70" : "opacity-0"
+          }`}
+        >
+          {c.task}
+        </p>
+        <button
+          onClick={() => setShowSubs(true)}
+          className="mt-3 font-pixel text-[9px] text-chalk-foreground/60 underline underline-offset-4 hover:text-chalk-foreground"
+        >
+          visa igen
+        </button>
+      </section>
 
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <button
-                onClick={submit}
-                className="rounded-sm border-2 border-border bg-primary px-4 py-2 font-pixel text-[10px] text-primary-foreground shadow-pixel-sm transition-transform active:translate-y-1 active:shadow-none"
-              >
-                SVARA
-              </button>
-              {c.mode === "tiles" && slots.length > 0 && (
-                <button
-                  onClick={() => setSlots([])}
-                  className="font-pixel text-[10px] text-muted-foreground underline underline-offset-4"
-                >
-                  rensa
-                </button>
+      <section
+        className={`pixel-panel rounded-sm bg-card p-4 ${status === "wrong" ? "animate-shake" : ""}`}
+      >
+        {c.mode === "tiles" ? (
+          <>
+            <div className="mb-3 flex min-h-16 flex-wrap items-center gap-2 rounded-sm border-2 border-dashed border-border bg-secondary/60 p-3">
+              {slots.length === 0 && (
+                <span className="text-muted-foreground">Klicka på orden i rätt ordning…</span>
               )}
-              <span className="ml-auto font-pixel text-[9px] text-muted-foreground">
-                {i + 1} / {CHALLENGES.length}
-              </span>
+              {slots.map((w, idx) => (
+                <Tile
+                  key={`${w}-${idx}`}
+                  word={w}
+                  tone={status}
+                  slotIndex={idx}
+                  onClick={() => setSlots(slots.filter((_, k) => k !== idx))}
+                />
+              ))}
             </div>
+            <div className="flex flex-wrap gap-2">
+              {remaining.map((w, idx) => (
+                <Tile key={`${w}-bank-${idx}`} word={w} onClick={() => setSlots([...slots, w])} />
+              ))}
+            </div>
+          </>
+        ) : (
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="Skriv på svenska…"
+            autoComplete="off"
+            className="w-full rounded-sm border-2 border-border bg-secondary/50 px-3 py-3 text-2xl outline-none focus:border-ring"
+          />
+        )}
 
-            {status === "wrong" && (
-              <p className="animate-pop mt-3 text-lg text-destructive">
-                Fröken Grammatik rynkar pannan. {c.hint}
-              </p>
-            )}
-            {status === "right" && (
-              <p className="animate-pop mt-3 text-lg text-success">
-                Hon nickar. “{c.answer}” — helt rätt.
-              </p>
-            )}
-          </section>
-        </>
-      )}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={submit}
+            className="rounded-sm border-2 border-border bg-primary px-4 py-2 font-pixel text-[10px] text-primary-foreground shadow-pixel-sm transition-transform active:translate-y-1 active:shadow-none"
+          >
+            SVARA
+          </button>
+          {c.mode === "tiles" && slots.length > 0 && (
+            <button
+              onClick={() => setSlots([])}
+              className="font-pixel text-[10px] text-muted-foreground underline underline-offset-4"
+            >
+              rensa
+            </button>
+          )}
+          <span className="ml-auto font-pixel text-[9px] text-muted-foreground">
+            {i + 1} / {zone.challenges.length} · BETYG {grade}
+          </span>
+        </div>
 
-      <footer className="mt-auto pt-4 font-pixel text-[9px] leading-relaxed text-muted-foreground">
-        MVP: Klassrummet · frågeordföljd + V2 · fluency bar · betyg D→A
-      </footer>
-    </main>
+        {status === "wrong" && (
+          <p className="animate-pop mt-3 text-lg text-destructive">
+            {zone.npc} rynkar pannan. {c.hint}
+          </p>
+        )}
+        {status === "right" && (
+          <p className="animate-pop mt-3 text-lg text-success">
+            Rätt. “{c.answer}”
+          </p>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -266,34 +426,48 @@ function FluencyBar({ value }: { value: number }) {
   );
 }
 
-function Ending({
+function ZoneEnd({
+  zone,
+  won,
   grade,
   misses,
   fluency,
-  total,
-  onReset,
+  onRetry,
+  onExit,
 }: {
+  zone: Zone;
+  won: boolean;
   grade: string;
   misses: number;
   fluency: number;
-  total: number;
-  onReset: () => void;
+  onRetry: () => void;
+  onExit: () => void;
 }) {
   return (
     <section className="pixel-panel animate-pop rounded-sm bg-chalk p-6 text-chalk-foreground">
-      <h2 className="font-pixel text-base leading-relaxed text-accent">KLASSRUMMET KLARAT</h2>
+      <h2 className="font-pixel text-base leading-relaxed text-accent">
+        {won ? `${zone.name.toUpperCase()} KLARAT` : "DU TAPPADE FLYTET"}
+      </h2>
       <p className="mt-3 text-2xl">
-        Du klarade alla {total} repliker. Flyt: {fluency}%. Misstag: {misses}.
+        {won ? zone.outro : `${zone.npc} bytte till engelska. Det är förlust.`}
       </p>
       <p className="mt-2 text-xl opacity-80">
-        Nytt betyg: {grade}. Matsalen (V2 under press) låses upp… i nästa version.
+        Flyt: {fluency}%. Misstag: {misses}. Betyg: {grade}.
       </p>
-      <button
-        onClick={onReset}
-        className="mt-5 rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[10px] text-accent-foreground shadow-pixel-sm active:translate-y-1 active:shadow-none"
-      >
-        SPELA IGEN
-      </button>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <button
+          onClick={onRetry}
+          className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[10px] text-accent-foreground shadow-pixel-sm active:translate-y-1 active:shadow-none"
+        >
+          SPELA IGEN
+        </button>
+        <button
+          onClick={onExit}
+          className="rounded-sm border-2 border-border bg-card px-4 py-2 font-pixel text-[10px] text-foreground shadow-pixel-sm active:translate-y-1 active:shadow-none"
+        >
+          TILL KARTAN
+        </button>
+      </div>
     </section>
   );
 }
