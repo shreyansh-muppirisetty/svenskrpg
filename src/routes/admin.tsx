@@ -66,13 +66,15 @@ function Admin() {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [editing, setEditing] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [unlockAll, setUnlockAll] = useState<boolean>(() => {
+  const [unlockAll, setUnlockAll] = useState<boolean>(false);
+
+  useEffect(() => {
     try {
-      return localStorage.getItem(ADMIN_UNLOCK_KEY) === "true";
+      setUnlockAll(localStorage.getItem(ADMIN_UNLOCK_KEY) === "true");
     } catch {
-      return false;
+      /* ignore */
     }
-  });
+  }, []);
 
   function toggleUnlockAll(val: boolean) {
     setUnlockAll(val);
