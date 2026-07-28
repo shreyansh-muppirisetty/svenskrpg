@@ -15,9 +15,7 @@ import {
 } from "@/game/zones";
 import { fetchGameContent, DEFAULT_STARTING_FLUENCY } from "@/game/remote";
 
-
 import { DifficultySelector, type Difficulty } from "@/components/DifficultySelector";
-import { AiZonePlay } from "@/components/AiZonePlay";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -103,10 +101,9 @@ function Game() {
           />
         </div>
       ) : (
-        <AiZonePlay
+        <ZonePlay
           key={screen.zone.id}
           zone={screen.zone}
-          difficulty={difficulty}
           startingFluency={startingFluency}
           onFinish={(grade) =>
             persist({
