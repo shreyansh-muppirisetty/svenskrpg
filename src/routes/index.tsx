@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ZONES,
@@ -12,6 +13,8 @@ import {
   type Zone,
   type Save,
 } from "@/game/zones";
+import { fetchGameContent, DEFAULT_STARTING_FLUENCY } from "@/game/remote";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
