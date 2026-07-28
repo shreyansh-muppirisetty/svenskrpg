@@ -277,7 +277,7 @@ function ZonePlay({
 
   function retry() {
     setI(0);
-    setFluency(50);
+    setFluency(startingFluency);
     setCleared(0);
     setMisses(0);
     setText("");
