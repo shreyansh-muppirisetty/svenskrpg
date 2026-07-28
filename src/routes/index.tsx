@@ -43,6 +43,14 @@ function Game() {
   const [screen, setScreen] = useState<Screen>({ view: "map" });
   const [save, setSave] = useState<Save>({ cleared: [], grades: {} });
 
+  const { data } = useQuery({
+    queryKey: ["game-content"],
+    queryFn: fetchGameContent,
+    staleTime: 30_000,
+  });
+  const zones = data?.zones ?? ZONES;
+  const startingFluency = data?.startingFluency ?? DEFAULT_STARTING_FLUENCY;
+
   useEffect(() => setSave(loadSave()), []);
 
   const persist = useCallback((s: Save) => {
@@ -63,18 +71,27 @@ function Game() {
               : `${screen.zone.name} · ${screen.zone.npc}`}
           </p>
         </div>
-        {screen.view === "zone" && (
-          <button
-            onClick={() => setScreen({ view: "map" })}
+        <div className="flex gap-2">
+          {screen.view === "zone" && (
+            <button
+              onClick={() => setScreen({ view: "map" })}
+              className="rounded-sm border-2 border-border bg-card px-3 py-2 font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
+            >
+              KARTAN
+            </button>
+          )}
+          <Link
+            to="/admin"
             className="rounded-sm border-2 border-border bg-card px-3 py-2 font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
           >
-            KARTAN
-          </button>
-        )}
+            ADMIN
+          </Link>
+        </div>
       </header>
 
       {screen.view === "map" ? (
         <MapScreen
+          zones={zones}
           save={save}
           onPick={(zone) => setScreen({ view: "zone", zone })}
           onWipe={() => persist({ cleared: [], grades: {} })}
@@ -83,6 +100,7 @@ function Game() {
         <ZonePlay
           key={screen.zone.id}
           zone={screen.zone}
+          startingFluency={startingFluency}
           onFinish={(grade) =>
             persist({
               cleared: Array.from(new Set([...save.cleared, screen.zone.id])),
@@ -94,17 +112,19 @@ function Game() {
       )}
 
       <footer className="mt-auto pt-4 font-pixel text-[9px] leading-relaxed text-muted-foreground">
-        5 zoner · frågor · V2 · en/ett · modalverb · bisatser · flyt & betyg
+        {zones.length} zoner · frågor · V2 · en/ett · modalverb · bisatser · flyt & betyg
       </footer>
     </main>
   );
 }
 
 function MapScreen({
+  zones,
   save,
   onPick,
   onWipe,
 }: {
+  zones: Zone[];
   save: Save;
   onPick: (z: Zone) => void;
   onWipe: () => void;
@@ -117,8 +137,9 @@ function MapScreen({
         </p>
       </section>
 
-      {ZONES.map((z, idx) => {
-        const unlocked = isUnlocked(idx, save.cleared);
+      {zones.map((z, idx) => {
+        const unlocked = isUnlocked(idx, save.cleared, zones);
+
         const grade = save.grades[z.id];
         return (
           <button
