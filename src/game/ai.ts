@@ -106,7 +106,7 @@ async function callGeminiJson<T>(messages: ChatMessage[]): Promise<T | null> {
   const apiKey = getGeminiApiKey();
   if (!apiKey) return null;
 
-  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash-latest"];
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-exp"];
 
   const contents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
