@@ -44,7 +44,7 @@ type Assign = {
   sentences?:string[]; questions?:string[]; verbs?:string[]; prompt?:string;
 };
 type Msg = { role:"user"|"model"; text:string };
-type DictMode = "sv-sv"|"en-sv";
+type DictMode = "sv-sv"|"en-sv"|"sv-en";
 
 // ── Grade math ────────────────────────────────────────────────────────────────
 
@@ -190,6 +190,18 @@ Ordklass: ...
 Betydelse: ... (simple Swedish)
 Exempel: ... (one natural Swedish sentence)
 Liknande ord: ... (2-4 words)
+Vanligt misstag: ...`;
+  }
+  if(mode==="sv-en"){
+    return`You are a concise Swedish-to-English school dictionary for Year 7/8 students.
+Translate and explain the Swedish word or phrase: "${clean}"
+Reply mostly in Swedish, but include the English translation. Use this exact format:
+Svenska: ...
+English: ...
+Ordklass: ...
+Betydelse: ... (simple Swedish)
+Example: ... (one natural English sentence)
+Liknande engelska ord: ... (2-4 English words)
 Vanligt misstag: ...`;
   }
   return`You are a concise English-to-Swedish school dictionary for Year 7/8 students.
@@ -611,6 +623,7 @@ RULES:
             <div className="flex gap-1 rounded-sm border-2 border-border bg-secondary/50 p-1">
               {([
                 ["sv-sv","SVENSKA → SVENSKA"],
+                ["sv-en","SVENSKA → ENGLISH"],
                 ["en-sv","ENGLISH → SVENSKA"],
               ] as [DictMode,string][]).map(([mode,label])=>(
                 <button key={mode} onClick={()=>setDictMode(mode)}
@@ -623,7 +636,7 @@ RULES:
           <div className="flex gap-2">
             <input value={dictIn} onChange={e=>setDictIn(e.target.value)}
               onKeyDown={e=>e.key==="Enter"&&searchDictionary()}
-              placeholder={dictMode==="sv-sv"?"Slå upp ett svenskt ord…":"Search an English word…"}
+              placeholder={dictMode==="en-sv"?"Search an English word…":"Slå upp ett svenskt ord…"}
               disabled={dictLoad} {...noCorr}
               className="flex-1 rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring disabled:opacity-50"/>
             <button onClick={searchDictionary} disabled={dictLoad||!dictIn.trim()}
