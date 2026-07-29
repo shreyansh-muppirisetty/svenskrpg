@@ -44,6 +44,7 @@ type Assign = {
   sentences?:string[]; questions?:string[]; verbs?:string[]; prompt?:string;
 };
 type Msg = { role:"user"|"model"; text:string };
+type DictMode = "sv-sv"|"en-sv";
 
 // ── Grade math ────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,31 @@ async function generateAssignment(key:string):Promise<Assign>{
 // ── No-autocorrect props ──────────────────────────────────────────────────────
 
 const noCorr={spellCheck:false,autoCorrect:"off",autoCapitalize:"off",autoComplete:"off"} as const;
+
+function dictionaryPrompt(word:string,mode:DictMode):string{
+  const clean=word.trim();
+  if(mode==="sv-sv"){
+    return`You are a concise Swedish school dictionary for Year 7/8 students.
+Look up the Swedish word or phrase: "${clean}"
+Reply in Swedish only. Use this exact format:
+Ord: ...
+Ordklass: ...
+Betydelse: ... (simple Swedish)
+Exempel: ... (one natural Swedish sentence)
+Liknande ord: ... (2-4 words)
+Vanligt misstag: ...`;
+  }
+  return`You are a concise English-to-Swedish school dictionary for Year 7/8 students.
+Translate and explain the English word or phrase: "${clean}"
+Reply mostly in Swedish, but include the English source. Use this exact format:
+English: ...
+Svenska: ...
+Ordklass: ...
+Betydelse: ... (simple Swedish)
+Exempel: ... (one natural Swedish sentence)
+Liknande ord: ... (2-4 Swedish words)
+Vanligt misstag: ...`;
+}
 
 // ── Interactive sub-views ─────────────────────────────────────────────────────
 
@@ -415,6 +441,11 @@ export function ClassroomMode({onExit}:{onExit:()=>void}){
   const [msgs,setMsgs]=useState<Msg[]>([]);
   const [chatIn,setChatIn]=useState("");
   const [chatLoad,setChatLoad]=useState(false);
+  const [dictMode,setDictMode]=useState<DictMode>("sv-sv");
+  const [dictIn,setDictIn]=useState("");
+  const [dictResult,setDictResult]=useState("");
+  const [dictLoad,setDictLoad]=useState(false);
+  const [dictErr,setDictErr]=useState("");
 
   const [prog,setProg]=useState<Progress>({grades:[],currentTerm:1});
   const [showMatrix,setShowMatrix]=useState(false);
@@ -497,6 +528,15 @@ RULES:
     finally{setChatLoad(false);setTimeout(()=>chatRef.current?.focus(),50);}
   }
 
+  async function searchDictionary(){
+    const word=dictIn.trim();
+    if(!word||dictLoad||!key)return;
+    setDictLoad(true);setDictErr("");setDictResult("");
+    try{setDictResult(await geminiRaw(key,dictionaryPrompt(word,dictMode),420));}
+    catch(e){setDictErr(e instanceof Error?e.message:"Kunde inte slå upp ordet");}
+    finally{setDictLoad(false);}
+  }
+
   const hasKey=!!key&&keyStatus!=="fail";
   const termGs=prog.grades.filter(g=>g.term===prog.currentTerm);
 
@@ -560,6 +600,43 @@ RULES:
           {genLoad&&<p className="animate-pulse font-pixel text-[9px] text-muted-foreground">Läraren förbereder uppgiften…</p>}
           {genErr&&<p className="font-pixel text-[9px] text-destructive">✗ {genErr}</p>}
           {assignment&&!genLoad&&<AssignmentView a={assignment} onAnswer={setAnswer}/>}
+        </div>
+      )}
+
+      {/* Dictionary */}
+      {hasKey&&(
+        <div className="pixel-panel flex flex-col gap-3 rounded-sm bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-pixel text-[9px] text-muted-foreground">DICTIONARY</span>
+            <div className="flex gap-1 rounded-sm border-2 border-border bg-secondary/50 p-1">
+              {([
+                ["sv-sv","SVENSKA → SVENSKA"],
+                ["en-sv","ENGLISH → SVENSKA"],
+              ] as [DictMode,string][]).map(([mode,label])=>(
+                <button key={mode} onClick={()=>setDictMode(mode)}
+                  className={`rounded-sm px-2 py-1 font-pixel text-[7px] ${dictMode===mode?"bg-primary text-primary-foreground":"text-muted-foreground hover:bg-secondary"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <input value={dictIn} onChange={e=>setDictIn(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&searchDictionary()}
+              placeholder={dictMode==="sv-sv"?"Slå upp ett svenskt ord…":"Search an English word…"}
+              disabled={dictLoad} {...noCorr}
+              className="flex-1 rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring disabled:opacity-50"/>
+            <button onClick={searchDictionary} disabled={dictLoad||!dictIn.trim()}
+              className="rounded-sm border-2 border-border bg-accent px-3 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-50">
+              {dictLoad?"SÖKER…":"SLÅ UPP"}
+            </button>
+          </div>
+          {dictErr&&<p className="font-pixel text-[9px] text-destructive">✗ {dictErr}</p>}
+          {dictResult&&(
+            <div className="rounded-sm bg-chalk p-3 text-chalk-foreground whitespace-pre-wrap">
+              {dictResult}
+            </div>
+          )}
         </div>
       )}
 
