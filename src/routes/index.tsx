@@ -39,6 +39,7 @@ export const Route = createFileRoute("/")({
 });
 
 type Screen = { view: "map" } | { view: "zone"; zone: Zone } | { view: "classroom" };
+type Status = "idle" | "right" | "wrong";
 
 function Game() {
   const [screen, setScreen] = useState<Screen>({ view: "map" });
