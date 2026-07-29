@@ -44,7 +44,7 @@ type Assign = {
   sentences?:string[]; questions?:string[]; verbs?:string[]; prompt?:string;
 };
 type Msg = { role:"user"|"model"; text:string };
-type DictMode = "sv-sv"|"en-sv";
+type DictMode = "sv-sv"|"en-sv"|"sv-en";
 
 // ── Grade math ────────────────────────────────────────────────────────────────
 
@@ -197,6 +197,8 @@ function DictionaryPanel({apiKey}:{apiKey:string}){
     setLoading(true);setResult("");setError("");
     const prompt=mode==="sv-sv"
       ?`Du är en svensk ordbok. Slå upp: "${q}". Ge: ORDKLASS, DEFINITION (på enkel svenska), BÖJNING (viktiga former), EXEMPEL (en mening), SYNONYMER (2-3). Kortfattad.`
+      :mode==="sv-en"
+      ?`You are a Swedish-to-English school dictionary for Year 7/8 students. Translate the Swedish word or phrase: "${q}". Reply in English. Give: ENGLISH (translation), WORD CLASS, DEFINITION (simple English), EXAMPLE (one natural English sentence), SIMILAR WORDS (2-3 English synonyms).`
       :`Swedish dictionary. Translate English: "${q}". Give: SVENSKA (translation), ORDKLASS, DEFINITION (in simple Swedish), EXEMPEL (both languages), SYNONYMER. Answer in Swedish.`;
     try{
       const res=await fetch(`${API_BASE}/${MODEL}:generateContent?key=${apiKey}`,{
@@ -213,7 +215,7 @@ function DictionaryPanel({apiKey}:{apiKey:string}){
   return(
     <div className="flex flex-col gap-3">
       <div className="flex gap-1">
-        {([["sv-sv","SV → SV"],["en-sv","EN → SV"]] as [DictMode,string][]).map(([m,label])=>(
+        {([["sv-sv","SV → SV"],["sv-en","SV → EN"],["en-sv","EN → SV"]] as [DictMode,string][]).map(([m,label])=>(
           <button key={m} onClick={()=>{setMode(m);setResult("");setQuery("");setTimeout(()=>inputRef.current?.focus(),50);}}
             className={`rounded-sm border-2 border-border px-3 py-1.5 font-pixel text-[9px] transition-colors ${mode===m?"bg-primary text-primary-foreground":"bg-card text-muted-foreground hover:bg-secondary/60"}`}>
             {label}
@@ -223,7 +225,7 @@ function DictionaryPanel({apiKey}:{apiKey:string}){
       <div className="flex gap-2">
         <input ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)}
           onKeyDown={e=>e.key==="Enter"&&lookup()}
-          placeholder={mode==="sv-sv"?"Sök ett svenskt ord…":"Search an English word…"}
+          placeholder={mode==="en-sv"?"Search an English word…":"Sök ett svenskt ord…"}
           {...noCorr} className="flex-1 rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring"/>
         <button onClick={lookup} disabled={loading||!query.trim()}
           className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-50">
@@ -233,7 +235,7 @@ function DictionaryPanel({apiKey}:{apiKey:string}){
       {error&&<p className="font-pixel text-[9px] text-destructive">✗ {error}</p>}
       {result&&(
         <div className="rounded-sm bg-secondary/40 p-4 text-base leading-relaxed whitespace-pre-wrap">
-          <div className="mb-2 font-pixel text-[9px] text-muted-foreground">{mode==="sv-sv"?"🇸🇪 SV → SV":"🇬🇧 EN → SV"} — {query}</div>
+          <div className="mb-2 font-pixel text-[9px] text-muted-foreground">{mode==="sv-sv"?"🇸🇪 SV → SV":mode==="sv-en"?"🇸🇪 SV → 🇬🇧 EN":"🇬🇧 EN → SV"} — {query}</div>
           {result}
         </div>
       )}
