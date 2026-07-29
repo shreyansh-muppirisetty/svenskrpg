@@ -191,7 +191,11 @@ async function generateAssignment(key: string, forceType?: AssignmentType): Prom
   const type = forceType ?? ALL_TYPES[Math.floor(Math.random() * ALL_TYPES.length)];
   const raw = await geminiRaw(key, TYPE_META[type].genPrompt, 1500);
   const json = JSON.parse(extractJson(raw));
-  return { ...json, type } as Assignment;
+  const a = { ...json, type } as Assignment;
+  // Shuffle word lists so positional patterns don't give away answers
+  if (a.words) a.words = [...a.words].sort(() => Math.random() - 0.5);
+  if (a.sentences && type === "reorder_sentences") a.sentences = [...a.sentences].sort(() => Math.random() - 0.5);
+  return a;
 }
 
 // ── Interactive sub-views ─────────────────────────────────────────────────────
