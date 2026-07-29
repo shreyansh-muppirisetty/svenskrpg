@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const PROG_STORE = "svenska-quest-classroom-progress-v3";
@@ -234,9 +235,9 @@ function DictionaryPanel({apiKey}:{apiKey:string}){
       </div>
       {error&&<p className="font-pixel text-[9px] text-destructive">✗ {error}</p>}
       {result&&(
-        <div className="rounded-sm bg-secondary/40 p-4 text-base leading-relaxed whitespace-pre-wrap">
+        <div className="rounded-sm bg-secondary/40 p-4 text-base leading-relaxed prose prose-sm max-w-none">
           <div className="mb-2 font-pixel text-[9px] text-muted-foreground">{mode==="sv-sv"?"🇸🇪 SV → SV":mode==="sv-en"?"🇸🇪 SV → 🇬🇧 EN":"🇬🇧 EN → SV"} — {query}</div>
-          {result}
+          <ReactMarkdown>{result}</ReactMarkdown>
         </div>
       )}
     </div>
@@ -646,8 +647,11 @@ RULES:
           <div className="flex h-64 flex-col gap-3 overflow-y-auto pr-1">
             {msgs.length===0&&<p className="text-muted-foreground italic">Ställ en fråga, be om ledtråd, eller be läraren rätta och betygsätta ditt svar. Betyget (A–F) sparas automatiskt i matrisen.</p>}
             {msgs.map((m,i)=>(
-              <div key={i} className={`max-w-[88%] rounded-sm px-3 py-2 text-base whitespace-pre-wrap ${m.role==="user"?"ml-auto bg-primary text-primary-foreground":"bg-secondary text-foreground"}`}>
-                {m.text.replace(/\[BETYG:\s*[ABCDEF]\]/g,"").trim()}
+              <div key={i} className={`max-w-[88%] rounded-sm px-3 py-2 text-base ${m.role==="user"?"ml-auto bg-primary text-primary-foreground":"bg-secondary text-foreground"}`}>
+                {m.role==="user"
+                  ? m.text.replace(/\[BETYG:\s*[ABCDEF]\]/g,"").trim()
+                  : <ReactMarkdown className="prose prose-sm max-w-none">{m.text.replace(/\[BETYG:\s*[ABCDEF]\]/g,"").trim()}</ReactMarkdown>
+                }
               </div>
             ))}
             {chatLoad&&<div className="max-w-[88%] animate-pulse rounded-sm bg-secondary px-3 py-2 font-pixel text-[9px] text-muted-foreground">Läraren skriver…</div>}
