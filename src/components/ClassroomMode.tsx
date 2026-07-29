@@ -184,9 +184,7 @@ function CircleVerbView({text,onChange}:{text:string;onChange:(s:string)=>void})
   const [sel,setSel]=useState<Set<number>>(new Set());
   const tokens=text.split(/\s+/).filter(Boolean);
   function toggle(i:number){
-    const n=new Set(sel);
-    if(n.has(i))n.delete(i);else n.add(i);
-    setSel(n);
+    const n=new Set(sel);n.has(i)?n.delete(i):n.add(i);setSel(n);
     onChange([...n].sort((a,b)=>a-b).map(idx=>tokens[idx].replace(/[.,!?;:]+$/,"")).join(", "));
   }
   return(
@@ -282,7 +280,7 @@ function ConjugateView({verbs,onChange}:{verbs:string[];onChange:(s:string)=>voi
 
 // ── Grade matrix ──────────────────────────────────────────────────────────────
 
-const GRADE_COLORS:Record<LG,string>={A:"bg-success text-success-foreground",B:"bg-success/70 text-success-foreground",C:"bg-primary text-primary-foreground",D:"bg-accent text-accent-foreground",E:"bg-accent text-accent-foreground",F:"bg-destructive text-destructive-foreground"};
+const GRADE_COLORS:Record<LG,string>={A:"bg-success text-success-foreground",B:"bg-success/70 text-success-foreground",C:"bg-primary text-primary-foreground",D:"bg-warn text-warn-foreground",E:"bg-accent text-accent-foreground",F:"bg-destructive text-destructive-foreground"};
 
 function GradeMatrix({prog}:{prog:Progress}){
   const {grades,currentTerm}=prog;
@@ -480,6 +478,7 @@ RULES:
     try{
       const reply=await geminiChat(key,teacherSys(),msgs,text.trim());
       setMsgs([...next,{role:"model",text:reply}]);
+      // Extract grade if present
       const gm=reply.match(/\[BETYG:\s*([ABCDEF])\]/);
       if(gm&&assignment){
         const grade=gm[1] as LG;
@@ -488,6 +487,7 @@ RULES:
           grade,comps:CMAP[assignment.type],term:prog.currentTerm,ts:Date.now(),
         };
         const newProg={...prog,grades:[...prog.grades,entry]};
+        // Advance term if complete
         if(newProg.grades.filter(g=>g.term===prog.currentTerm).length>=TERM_LENGTH){
           newProg.currentTerm=prog.currentTerm+1;
         }
@@ -556,7 +556,7 @@ RULES:
               {genLoad?"GENERERAR…":assignment?"NY UPPGIFT":"STARTA LEKTION"}
             </button>
           </div>
-          {!assignment&&!genLoad&&<p className="text-muted-foreground">Tryck ”Starta lektion” för att få en uppgift. Varje uppgift är unik och genereras på Y7/8-nivå.</p>}
+          {!assignment&&!genLoad&&<p className="text-muted-foreground">Tryck "Starta lektion" för att få en uppgift. Varje uppgift är unik och genereras på Y7/8-nivå.</p>}
           {genLoad&&<p className="animate-pulse font-pixel text-[9px] text-muted-foreground">Läraren förbereder uppgiften…</p>}
           {genErr&&<p className="font-pixel text-[9px] text-destructive">✗ {genErr}</p>}
           {assignment&&!genLoad&&<AssignmentView a={assignment} onAnswer={setAnswer}/>}
