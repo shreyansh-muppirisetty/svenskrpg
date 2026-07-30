@@ -2,28 +2,21 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { ClassroomMode } from "@/components/ClassroomMode";
+import { ClassBook } from "@/components/ClassBook";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Svenska Quest — Grammar Is the Game" },
-      {
-        name: "description",
-        content:
-          "A classroom mode for Swedish practice with AI-generated assignments, a dictionary, teacher chat, and saved grades.",
-      },
+      { name: "description", content: "A classroom mode for Swedish practice with AI-generated assignments, a dictionary, teacher chat, and saved grades." },
       { property: "og:title", content: "Svenska Quest — Klassrumsläge" },
-      {
-        property: "og:description",
-        content:
-          "Practice Swedish with AI-generated assignments, a dictionary, teacher chat, and saved grades.",
-      },
+      { property: "og:description", content: "Practice Swedish with AI-generated assignments, a dictionary, teacher chat, and saved grades." },
     ],
   }),
   component: Game,
 });
 
-type Screen = { view: "map" } | { view: "classroom" };
+type Screen = { view: "map" } | { view: "classroom" } | { view: "classbook" };
 
 function Game() {
   const [screen, setScreen] = useState<Screen>({ view: "map" });
@@ -32,12 +25,8 @@ function Game() {
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-5 px-4 py-8">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-pixel text-lg leading-relaxed text-primary sm:text-2xl">
-            SVENSKA QUEST
-          </h1>
-          <p className="text-muted-foreground">
-            Klassrumsläge · Läraren
-          </p>
+          <h1 className="font-pixel text-lg leading-relaxed text-primary sm:text-2xl">SVENSKA QUEST</h1>
+          <p className="text-muted-foreground">Klassrumsläge · Läraren</p>
         </div>
         <div className="flex gap-2">
           {screen.view !== "map" && (
@@ -48,29 +37,31 @@ function Game() {
               KARTAN
             </button>
           )}
-          <Link
-            to="/admin"
-            className="rounded-sm border-2 border-border bg-card px-3 py-2 font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none"
-          >
+          <Link to="/admin" className="rounded-sm border-2 border-border bg-card px-3 py-2 font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none">
             ADMIN
           </Link>
         </div>
       </header>
 
       {screen.view === "map" ? (
-        <MapScreen onClassroom={() => setScreen({ view: "classroom" })} />
-      ) : (
+        <MapScreen
+          onClassroom={() => setScreen({ view: "classroom" })}
+          onClassBook={() => setScreen({ view: "classbook" })}
+        />
+      ) : screen.view === "classroom" ? (
         <ClassroomMode onExit={() => setScreen({ view: "map" })} />
+      ) : (
+        <ClassBook onExit={() => setScreen({ view: "map" })} />
       )}
 
       <footer className="mt-auto pt-4 font-pixel text-[9px] leading-relaxed text-muted-foreground">
-        klassrumsläge · ordbok · uppgifter · betygsmatris
+        klassrumsläge · klassbok · ordbok · uppgifter · betygsmatris
       </footer>
     </main>
   );
 }
 
-function MapScreen({ onClassroom }: { onClassroom: () => void }) {
+function MapScreen({ onClassroom, onClassBook }: { onClassroom: () => void; onClassBook: () => void }) {
   return (
     <div className="flex flex-col gap-3">
       <section className="pixel-panel rounded-sm bg-chalk p-5 text-chalk-foreground">
@@ -90,6 +81,21 @@ function MapScreen({ onClassroom }: { onClassroom: () => void }) {
             <span className="rounded-sm bg-accent px-1.5 py-0.5 font-pixel text-[7px] text-accent-foreground">BETA</span>
           </span>
           <span className="block text-lg text-muted-foreground">Chatta fritt med Läraren på svenska.</span>
+        </span>
+        <span className="font-pixel text-xl text-accent-foreground">→</span>
+      </button>
+
+      <button
+        onClick={onClassBook}
+        className="pixel-panel flex items-center gap-4 rounded-sm bg-card p-4 text-left transition-transform active:translate-y-0.5"
+      >
+        <span className="font-pixel text-[10px] text-muted-foreground">📖</span>
+        <span className="flex-1">
+          <span className="flex items-center gap-2">
+            <span className="block font-pixel text-[11px] text-foreground">Klassbok</span>
+            <span className="rounded-sm bg-accent px-1.5 py-0.5 font-pixel text-[7px] text-accent-foreground">BETA</span>
+          </span>
+          <span className="block text-lg text-muted-foreground">Läs en bok kapitel för kapitel och bli bedömd.</span>
         </span>
         <span className="font-pixel text-xl text-accent-foreground">→</span>
       </button>
