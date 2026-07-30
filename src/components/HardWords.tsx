@@ -1,6 +1,6 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { loadHardWords, deleteHardWord, shortMeaning, MODE_LABEL, type HardWord } from "@/lib/hardwords";
+import { loadHardWords, deleteHardWord, saveHardWord, shortMeaning, MODE_LABEL, type HardWord, type DictMode } from "@/lib/hardwords";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -79,6 +79,11 @@ export function HardWords({ onExit }: { onExit: () => void }) {
     setScreen("match");
   }
 
+  function handleAdd(word: string, mode: DictMode, meaning: string) {
+    saveHardWord(word, mode, meaning);
+    refresh();
+  }
+
   function handleDelete(id: string) {
     deleteHardWord(id);
     refresh();
@@ -115,6 +120,7 @@ export function HardWords({ onExit }: { onExit: () => void }) {
           onExpand={id => setExpanded(prev => prev === id ? null : id)}
           onDelete={handleDelete}
           onQuiz={startQuiz} onMatch={startMatch}
+          onAdd={handleAdd}
         />
       )}
 
@@ -135,66 +141,104 @@ export function HardWords({ onExit }: { onExit: () => void }) {
 
 // ── Browse ────────────────────────────────────────────────────────────────────
 
-function BrowseScreen({ words, expanded, canPlay, onExpand, onDelete, onQuiz, onMatch }: {
+function BrowseScreen({ words, expanded, canPlay, onExpand, onDelete, onQuiz, onMatch, onAdd }: {
   words: HardWord[]; expanded: string | null; canPlay: boolean;
   onExpand: (id: string) => void; onDelete: (id: string) => void;
   onQuiz: () => void; onMatch: () => void;
+  onAdd: (word: string, mode: DictMode, meaning: string) => void;
 }) {
-  if (words.length === 0) {
-    return (
-      <div className="pixel-panel rounded-sm bg-card p-10 text-center flex flex-col gap-3">
-        <p className="text-2xl">📖</p>
-        <p className="font-pixel text-[9px] text-muted-foreground">INGA ORD ÄN</p>
-        <p className="text-muted-foreground text-sm">Slå upp ord i ordboken — de sparas automatiskt här.</p>
-      </div>
-    );
-  }
+  const [showForm, setShowForm] = useState(false);
+  const [word, setWord] = useState("");
+  const [meaning, setMeaning] = useState("");
+  const [mode, setMode] = useState<DictMode>("sv-sv");
+  const noCorr = { spellCheck: false, autoCorrect: "off", autoCapitalize: "off", autoComplete: "off" } as const;
 
+  function save() {
+    if (!word.trim() || !meaning.trim()) return;
+    onAdd(word, mode, meaning);
+    setWord(""); setMeaning(""); setShowForm(false);
+  }
   return (
     <div className="flex flex-col gap-3">
-      {/* Play buttons */}
-      <div className="flex gap-2">
-        <button onClick={onMatch} disabled={!canPlay}
-          className="flex-1 rounded-sm border-2 border-border bg-accent px-3 py-2.5 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:cursor-not-allowed">
-          🎮 MATCHA ORD
+      {/* Add word form */}
+      <div className="pixel-panel rounded-sm bg-card overflow-hidden">
+        <button onClick={() => setShowForm(s => !s)}
+          className="w-full flex items-center justify-between px-4 py-3 font-pixel text-[9px] text-muted-foreground hover:bg-secondary/30 transition-colors">
+          <span>+ LÄGG TILL ORD MANUELLT</span>
+          <span>{showForm ? "▲" : "▼"}</span>
         </button>
-        <button onClick={onQuiz} disabled={!canPlay}
-          className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2.5 font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:cursor-not-allowed">
-          📝 QUIZ
-        </button>
-      </div>
-      {!canPlay && (
-        <p className="text-center font-pixel text-[8px] text-muted-foreground">Slå upp minst 4 ord för att spela</p>
-      )}
-
-      {/* Word list */}
-      {words.map(w => (
-        <div key={w.id} className="pixel-panel rounded-sm bg-card overflow-hidden">
-          <button
-            onClick={() => onExpand(w.id)}
-            className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-secondary/30 transition-colors"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="text-lg font-semibold truncate">{w.word}</span>
-              <span className="rounded-sm bg-secondary/60 px-1.5 py-0.5 font-pixel text-[7px] text-muted-foreground shrink-0">
-                {MODE_LABEL[w.mode]}
-              </span>
+        {showForm && (
+          <div className="border-t-2 border-border p-4 flex flex-col gap-3">
+            <div className="flex gap-1 flex-wrap">
+              {([ ["sv-sv", "SV → SV"], ["sv-en", "SV → EN"], ["en-sv", "EN → SV"] ] as [DictMode, string][]).map(([m, label]) => (
+                <button key={m} onClick={() => setMode(m)}
+                  className={`rounded-sm border-2 border-border px-3 py-1.5 font-pixel text-[9px] ${mode === m ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"}`}>
+                  {label}
+                </button>
+              ))}
             </div>
-            <span className="text-muted-foreground shrink-0">{expanded === w.id ? "▲" : "▼"}</span>
-          </button>
-          {expanded === w.id && (
-            <div className="border-t-2 border-border px-4 pb-4 pt-3 flex flex-col gap-3">
-              <div className="prose prose-sm max-w-none text-sm leading-relaxed">
-                <ReactMarkdown>{w.meaning}</ReactMarkdown>
-              </div>
-              <button onClick={() => onDelete(w.id)}
-                className="self-end rounded-sm border-2 border-border bg-destructive/10 px-3 py-1.5 font-pixel text-[8px] text-destructive shadow-pixel-sm active:translate-y-0.5 active:shadow-none">
-                TA BORT
+            <input value={word} onChange={e => setWord(e.target.value)} placeholder="Ord" {...noCorr}
+              className="rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring" />
+            <textarea value={meaning} onChange={e => setMeaning(e.target.value)} placeholder="Betydelse / anteckningar…" rows={3} {...noCorr}
+              className="rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring resize-none" />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowForm(false)}
+                className="rounded-sm border-2 border-border bg-card px-4 py-2 font-pixel text-[9px] shadow-pixel-sm">
+                AVBRYT
+              </button>
+              <button onClick={save} disabled={!word.trim() || !meaning.trim()}
+                className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm disabled:opacity-40">
+                SPARA
               </button>
             </div>
-          )}
+          </div>
+        )}
+      </div>
+
+      {words.length === 0 ? (
+        <div className="pixel-panel rounded-sm bg-card p-10 text-center flex flex-col gap-3">
+          <p className="text-2xl">📖</p>
+          <p className="font-pixel text-[9px] text-muted-foreground">INGA ORD ÄN</p>
+          <p className="text-muted-foreground text-sm">Slå upp ord i ordboken eller lägg till manuellt ovan.</p>
         </div>
-      ))}
+      ) : (
+        <>
+          <div className="flex gap-2">
+            <button onClick={onMatch} disabled={!canPlay}
+              className="flex-1 rounded-sm border-2 border-border bg-accent px-3 py-2.5 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:cursor-not-allowed">
+              🎮 MATCHA ORD
+            </button>
+            <button onClick={onQuiz} disabled={!canPlay}
+              className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2.5 font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40 disabled:cursor-not-allowed">
+              📝 QUIZ
+            </button>
+          </div>
+          {!canPlay && <p className="text-center font-pixel text-[8px] text-muted-foreground">Lägg till minst 4 ord för att spela</p>}
+          {words.map(w => (
+            <div key={w.id} className="pixel-panel rounded-sm bg-card overflow-hidden">
+              <button onClick={() => onExpand(w.id)}
+                className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-secondary/30 transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-lg font-semibold truncate">{w.word}</span>
+                  <span className="rounded-sm bg-secondary/60 px-1.5 py-0.5 font-pixel text-[7px] text-muted-foreground shrink-0">{MODE_LABEL[w.mode]}</span>
+                </div>
+                <span className="text-muted-foreground shrink-0">{expanded === w.id ? "▲" : "▼"}</span>
+              </button>
+              {expanded === w.id && (
+                <div className="border-t-2 border-border px-4 pb-4 pt-3 flex flex-col gap-3">
+                  <div className="prose prose-sm max-w-none text-sm leading-relaxed">
+                    <ReactMarkdown>{w.meaning}</ReactMarkdown>
+                  </div>
+                  <button onClick={() => onDelete(w.id)}
+                    className="self-end rounded-sm border-2 border-border bg-destructive/10 px-3 py-1.5 font-pixel text-[8px] text-destructive shadow-pixel-sm active:translate-y-0.5 active:shadow-none">
+                    TA BORT
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
