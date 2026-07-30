@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
+import { detectAndSaveEnEtt } from "@/lib/enellerett";
 
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const BOOK_STORE = "svenska-quest-classbook-v1";
@@ -301,6 +302,7 @@ export function ClassBook({ onExit }: { onExit: () => void }) {
         nextChapter: chapter.number + 1,
       };
       saveProgress(newProgress);
+      detectAndSaveEnEtt(key, answers.map(a => a.text).join(" ")); // fire-and-forget
       setPhase({ name: "chapter-result", result, progress: newProgress });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Betygsättning misslyckades");

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
+import { detectAndSaveEnEtt } from "@/lib/enellerett";
 
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const PROG_STORE = "svenska-quest-classroom-progress-v3";
@@ -487,6 +488,7 @@ RULES:
       // Extract grade if present
       const gm=reply.match(/\[BETYG:\s*([ABCDEF])\]/);
       if(gm&&assignment){
+        detectAndSaveEnEtt(key, text.trim()); // fire-and-forget
         const grade=gm[1] as LG;
         const entry:GradeEntry={
           id:Date.now().toString(),type:assignment.type,title:assignment.title,

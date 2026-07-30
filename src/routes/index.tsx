@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ClassroomMode } from "@/components/ClassroomMode";
 import { ClassBook } from "@/components/ClassBook";
 import { HardWords } from "@/components/HardWords";
+import { EnEllerEtt } from "@/components/EnEllerEtt";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/")({
   component: Game,
 });
 
-type Screen = { view: "map" } | { view: "classroom" } | { view: "classbook" } | { view: "hardwords" };
+type Screen = { view: "map" } | { view: "classroom" } | { view: "classbook" } | { view: "hardwords" } | { view: "enellerett" };
 
 function Game() {
   const [screen, setScreen] = useState<Screen>({ view: "map" });
@@ -49,13 +50,16 @@ function Game() {
           onClassroom={() => setScreen({ view: "classroom" })}
           onClassBook={() => setScreen({ view: "classbook" })}
           onHardWords={() => setScreen({ view: "hardwords" })}
+          onEnEllerEtt={() => setScreen({ view: "enellerett" })}
         />
       ) : screen.view === "classroom" ? (
         <ClassroomMode onExit={() => setScreen({ view: "map" })} />
       ) : screen.view === "classbook" ? (
         <ClassBook onExit={() => setScreen({ view: "map" })} />
-      ) : (
+      ) : screen.view === "hardwords" ? (
         <HardWords onExit={() => setScreen({ view: "map" })} />
+      ) : (
+        <EnEllerEtt onExit={() => setScreen({ view: "map" })} />
       )}
 
       <footer className="mt-auto pt-4 font-pixel text-[9px] leading-relaxed text-muted-foreground">
@@ -65,7 +69,7 @@ function Game() {
   );
 }
 
-function MapScreen({ onClassroom, onClassBook, onHardWords }: { onClassroom: () => void; onClassBook: () => void; onHardWords: () => void }) {
+function MapScreen({ onClassroom, onClassBook, onHardWords, onEnEllerEtt }: { onClassroom: () => void; onClassBook: () => void; onHardWords: () => void; onEnEllerEtt: () => void }) {
   return (
     <div className="flex flex-col gap-3">
       <section className="pixel-panel rounded-sm bg-chalk p-5 text-chalk-foreground">
@@ -114,6 +118,20 @@ function MapScreen({ onClassroom, onClassBook, onHardWords }: { onClassroom: () 
             <span className="rounded-sm bg-accent px-1.5 py-0.5 font-pixel text-[7px] text-accent-foreground">BETA</span>
           </span>
           <span className="block text-lg text-muted-foreground">Repetera uppslagda ord med quiz och matchningsspel.</span>
+        </span>
+        <span className="font-pixel text-xl text-accent-foreground">→</span>
+      </button>
+      <button
+        onClick={onEnEllerEtt}
+        className="pixel-panel flex items-center gap-4 rounded-sm bg-card p-4 text-left transition-transform active:translate-y-0.5"
+      >
+        <span className="font-pixel text-[10px] text-muted-foreground">🎯</span>
+        <span className="flex-1">
+          <span className="flex items-center gap-2">
+            <span className="block font-pixel text-[11px] text-foreground">En eller Ett</span>
+            <span className="rounded-sm bg-accent px-1.5 py-0.5 font-pixel text-[7px] text-accent-foreground">BETA</span>
+          </span>
+          <span className="block text-lg text-muted-foreground">Öva artiklar — fel en/ett sparas automatiskt.</span>
         </span>
         <span className="font-pixel text-xl text-accent-foreground">→</span>
       </button>
