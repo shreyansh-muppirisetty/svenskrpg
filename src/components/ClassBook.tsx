@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { DictionaryPanel } from "@/components/DictionaryPanel";
 
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const BOOK_STORE = "svenska-quest-classbook-v1";
+const CHAPTER_CACHE = "svenska-quest-chapter-cache-v1";
 const MODEL = "gemini-3.1-flash-lite";
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -54,6 +56,25 @@ function loadKey(): string { try { return localStorage.getItem(KEY_STORE) ?? "";
 function loadSaved(): BookProgress | null { try { const r = localStorage.getItem(BOOK_STORE); return r ? JSON.parse(r) : null; } catch { return null; } }
 function saveProgress(p: BookProgress) { try { localStorage.setItem(BOOK_STORE, JSON.stringify(p)); } catch {} }
 function clearProgress() { try { localStorage.removeItem(BOOK_STORE); } catch {} }
+
+// Chapter cache — so each chapter only generates once
+interface CachedChapter { chapter: ChapterContent; questions: Question[] }
+function chapterCacheKey(bookId: string, num: number) { return `${bookId}-ch${num}`; }
+function loadCachedChapter(bookId: string, num: number): CachedChapter | null {
+  try {
+    const raw = localStorage.getItem(CHAPTER_CACHE);
+    const cache: Record<string, CachedChapter> = raw ? JSON.parse(raw) : {};
+    return cache[chapterCacheKey(bookId, num)] ?? null;
+  } catch { return null; }
+}
+function saveCachedChapter(bookId: string, num: number, data: CachedChapter) {
+  try {
+    const raw = localStorage.getItem(CHAPTER_CACHE);
+    const cache: Record<string, CachedChapter> = raw ? JSON.parse(raw) : {};
+    cache[chapterCacheKey(bookId, num)] = data;
+    localStorage.setItem(CHAPTER_CACHE, JSON.stringify(cache));
+  } catch {}
+}
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
@@ -226,11 +247,20 @@ export function ClassBook({ onExit }: { onExit: () => void }) {
     setError("");
     const meta = book.chapters.find(c => c.number === num);
     if (!meta) return;
+
+    // Check cache first
+    const cached = loadCachedChapter(book.id, num);
+    if (cached) {
+      setPhase({ name: "reading", chapter: cached.chapter, questions: cached.questions, book, progress });
+      return;
+    }
+
     try {
       const content = await gemini(key, chapterPrompt(book, num, meta.title, progress.completedChapters), 1500);
       const qRaw = await gemini(key, questionsPrompt(book.title, content), 1200);
       const questions = parseJSON<Question[]>(qRaw);
       const chapter: ChapterContent = { number: num, title: meta.title, content };
+      saveCachedChapter(book.id, num, { chapter, questions });
       setPhase({ name: "reading", chapter, questions, book, progress });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fel vid laddning av kapitel");
@@ -302,8 +332,8 @@ export function ClassBook({ onExit }: { onExit: () => void }) {
 
       {phase.name === "loading-chapter" && (
         <LoadingPanel
-          text={`Läraren förbereder kapitel ${phase.chapterNum}…`}
-          sub="Genererar kapiteltext och frågor — tar ~15 sekunder"
+          text={`Laddar kapitel ${phase.chapterNum}…`}
+          sub="Genererar kapiteltext och frågor — sparas lokalt efteråt"
         />
       )}
 
@@ -312,6 +342,7 @@ export function ClassBook({ onExit }: { onExit: () => void }) {
           chapter={phase.chapter}
           book={phase.book}
           totalChapters={phase.book.chapters.length}
+          apiKey={key}
           onDone={() => setPhase({
             name: "questions",
             chapter: phase.chapter, questions: phase.questions,
@@ -329,6 +360,7 @@ export function ClassBook({ onExit }: { onExit: () => void }) {
           currentText={phase.currentText}
           chapterTitle={phase.chapter.title}
           chapterNum={phase.chapter.number}
+          apiKey={key}
           onAnswer={text => setPhase(p => p.name === "questions" ? { ...p, currentText: text } : p)}
           onNext={() => {
             if (phase.name !== "questions") return;
@@ -496,12 +528,13 @@ function SelectBookScreen({
 }
 
 function ReadingScreen({
-  chapter, book, totalChapters, onDone, onExit,
+  chapter, book, totalChapters, apiKey, onDone, onExit,
 }: {
   chapter: ChapterContent; book: BookOption; totalChapters: number;
-  onDone: () => void; onExit: () => void;
+  apiKey: string; onDone: () => void; onExit: () => void;
 }) {
   const [canFinish, setCanFinish] = useState(false);
+  const [showDict, setShowDict] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   // Unlock button when user scrolls to end of chapter
@@ -531,9 +564,17 @@ function ReadingScreen({
             ))}
           </div>
         </div>
-        <button onClick={onExit} className="ml-4 rounded-sm border-2 border-border bg-card px-3 py-1.5 font-pixel text-[9px] shadow-pixel-sm shrink-0">
-          KARTAN
-        </button>
+        <div className="flex gap-2 ml-4 shrink-0">
+          {apiKey && (
+            <button onClick={() => setShowDict(s => !s)}
+              className={`rounded-sm border-2 border-border px-2 py-1.5 font-pixel text-[8px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none ${showDict ? "bg-accent text-accent-foreground" : "bg-card"}`}>
+              ORDBOK
+            </button>
+          )}
+          <button onClick={onExit} className="rounded-sm border-2 border-border bg-card px-3 py-1.5 font-pixel text-[9px] shadow-pixel-sm shrink-0">
+            KARTAN
+          </button>
+        </div>
       </div>
 
       {/* Chapter text — book-like reading */}
@@ -548,6 +589,14 @@ function ReadingScreen({
           <div ref={endRef} className="h-1" />
         </div>
       </div>
+
+      {/* Dictionary */}
+      {showDict && apiKey && (
+        <div className="pixel-panel rounded-sm bg-card p-4 flex flex-col gap-2">
+          <span className="font-pixel text-[9px] text-muted-foreground">ORDBOK</span>
+          <DictionaryPanel apiKey={apiKey} />
+        </div>
+      )}
 
       {/* Done reading */}
       <div className="flex flex-col items-center gap-2 pb-2">
@@ -567,16 +616,17 @@ function ReadingScreen({
 }
 
 function QuestionsScreen({
-  questions, currentQ, currentText, chapterTitle, chapterNum,
+  questions, currentQ, currentText, chapterTitle, chapterNum, apiKey,
   onAnswer, onNext,
 }: {
   questions: Question[]; currentQ: number; currentText: string;
-  chapterTitle: string; chapterNum: number;
+  chapterTitle: string; chapterNum: number; apiKey: string;
   onAnswer: (t: string) => void; onNext: () => void;
 }) {
   const q = questions[currentQ];
   const isLast = currentQ === questions.length - 1;
   const charLen = currentText.trim().length;
+  const [showDict, setShowDict] = useState(false);
 
   const charColor = charLen < 60 ? "text-red-500" : charLen < 150 ? "text-yellow-600" : "text-emerald-600";
   const charMsg = charLen < 60 ? "Skriv mer — för kort svar ger lågt betyg" : charLen < 150 ? "Bra, fortsätt utveckla ditt svar" : "Utmärkt längd!";
@@ -585,13 +635,21 @@ function QuestionsScreen({
     <div className="flex flex-col gap-4">
       {/* Progress */}
       <div className="pixel-panel rounded-sm bg-card p-3">
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex items-center justify-between mb-2">
           <span className="font-pixel text-[9px] text-muted-foreground">
             Kap. {chapterNum}: {chapterTitle}
           </span>
-          <span className="font-pixel text-[9px] text-muted-foreground">
-            FRÅGA {currentQ + 1} / {questions.length}
-          </span>
+          <div className="flex items-center gap-2">
+            {apiKey && (
+              <button onClick={() => setShowDict(s => !s)}
+                className={`rounded-sm border-2 border-border px-2 py-1 font-pixel text-[8px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none ${showDict ? "bg-accent text-accent-foreground" : "bg-card"}`}>
+                ORDBOK
+              </button>
+            )}
+            <span className="font-pixel text-[9px] text-muted-foreground">
+              FRÅGA {currentQ + 1} / {questions.length}
+            </span>
+          </div>
         </div>
         <div className="flex gap-0.5">
           {questions.map((_, i) => (
@@ -635,6 +693,13 @@ function QuestionsScreen({
       <div className="rounded-sm bg-secondary/40 px-4 py-3 font-pixel text-[8px] text-muted-foreground leading-relaxed">
         💡 Använd textbelägg, motivera åsikter, koppla till egna erfarenheter. Du kan ha ett "fel" svar och ändå få A — det handlar om hur du tänker.
       </div>
+
+      {showDict && apiKey && (
+        <div className="pixel-panel rounded-sm bg-card p-4 flex flex-col gap-2">
+          <span className="font-pixel text-[9px] text-muted-foreground">ORDBOK</span>
+          <DictionaryPanel apiKey={apiKey} />
+        </div>
+      )}
     </div>
   );
 }
