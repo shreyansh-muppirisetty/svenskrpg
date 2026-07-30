@@ -2,6 +2,19 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { loadHardWords, deleteHardWord, saveHardWord, shortMeaning, MODE_LABEL, type HardWord, type DictMode } from "@/lib/hardwords";
 
+const MODEL = "gemini-3.1-flash-lite";
+const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const KEY_STORE = "svenska-quest-classroom-gemini-key";
+const noCorr = { spellCheck: false, autoCorrect: "off", autoCapitalize: "off", autoComplete: "off" } as const;
+
+function loadKey() { try { return localStorage.getItem(KEY_STORE) ?? ""; } catch { return ""; } }
+
+function buildPrompt(q: string, mode: DictMode) {
+  if (mode === "sv-sv") return `Du är en svensk ordbok. Slå upp: "${q}". Ge: ORDKLASS, DEFINITION (på enkel svenska), BÖJNING, EXEMPEL (en mening), SYNONYMER (2-3). Kortfattad.`;
+  if (mode === "sv-en") return `Swedish-to-English dictionary. Translate: "${q}". Give: ENGLISH, WORD CLASS, DEFINITION, EXAMPLE, SIMILAR WORDS.`;
+  return `English-to-Swedish dictionary. Translate: "${q}". Give: SVENSKA, ORDKLASS, DEFINITION (simple Swedish), EXEMPEL, SYNONYMER.`;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Screen = "browse" | "quiz" | "match";
@@ -149,15 +162,31 @@ function BrowseScreen({ words, expanded, canPlay, onExpand, onDelete, onQuiz, on
 }) {
   const [showForm, setShowForm] = useState(false);
   const [word, setWord] = useState("");
-  const [meaning, setMeaning] = useState("");
   const [mode, setMode] = useState<DictMode>("sv-sv");
-  const noCorr = { spellCheck: false, autoCorrect: "off", autoCapitalize: "off", autoComplete: "off" } as const;
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const key = loadKey();
 
-  function save() {
-    if (!word.trim() || !meaning.trim()) return;
-    onAdd(word, mode, meaning);
-    setWord(""); setMeaning(""); setShowForm(false);
+  async function lookupAndAdd() {
+    const q = word.trim();
+    if (!q || loading || !key) return;
+    setLoading(true); setErr("");
+    try {
+      const res = await fetch(`${API_BASE}/${MODEL}:generateContent?key=${key}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: buildPrompt(q, mode) }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 400 } }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      const meaning = d.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      if (!meaning) throw new Error("Inget svar");
+      onAdd(q, mode, meaning);
+      setWord(""); setShowForm(false);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Fel"); }
+    finally { setLoading(false); }
   }
+
+  function save() { lookupAndAdd(); }
   return (
     <div className="flex flex-col gap-3">
       {/* Add word form */}
@@ -177,20 +206,19 @@ function BrowseScreen({ words, expanded, canPlay, onExpand, onDelete, onQuiz, on
                 </button>
               ))}
             </div>
-            <input value={word} onChange={e => setWord(e.target.value)} placeholder="Ord" {...noCorr}
-              className="rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring" />
-            <textarea value={meaning} onChange={e => setMeaning(e.target.value)} placeholder="Betydelse / anteckningar…" rows={3} {...noCorr}
-              className="rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring resize-none" />
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setShowForm(false)}
-                className="rounded-sm border-2 border-border bg-card px-4 py-2 font-pixel text-[9px] shadow-pixel-sm">
-                AVBRYT
-              </button>
-              <button onClick={save} disabled={!word.trim() || !meaning.trim()}
+            <div className="flex gap-2">
+              <input value={word} onChange={e => setWord(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && save()}
+                placeholder={mode === "en-sv" ? "English word…" : "Skriv ett ord…"}
+                disabled={loading} {...noCorr}
+                className="flex-1 rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring disabled:opacity-50" />
+              <button onClick={save} disabled={!word.trim() || loading || !key}
                 className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm disabled:opacity-40">
-                SPARA
+                {loading ? "…" : "LÄGG TILL"}
               </button>
             </div>
+            {!key && <p className="font-pixel text-[8px] text-destructive">Ange API-nyckel i Klassrumsläget först</p>}
+            {err && <p className="font-pixel text-[8px] text-destructive">✗ {err}</p>}
           </div>
         )}
       </div>
