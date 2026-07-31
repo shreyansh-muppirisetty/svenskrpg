@@ -122,7 +122,10 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
           )}
           {msg.type==="audio" && (
             <div className="flex items-center gap-2 px-2 py-1" style={{minWidth:180}}>
-              <div className="w-7 h-7 border-2 border-border flex items-center justify-center font-pixel text-[8px] bg-accent text-accent-foreground shrink-0">▶</div>
+              <button type="button" onClick={toggleAudio} aria-label={playing?"Stoppa röstmeddelande":"Spela röstmeddelande"}
+                className="w-7 h-7 border-2 border-border flex items-center justify-center font-pixel text-[8px] bg-accent text-accent-foreground shrink-0 active:translate-y-0.5">
+                {playing ? "■" : "▶"}
+              </button>
               <Waveform seed={msg.id}/>
               <span className="font-pixel text-[7px] text-muted-foreground">{msg.duration||"0:08"}</span>
             </div>
