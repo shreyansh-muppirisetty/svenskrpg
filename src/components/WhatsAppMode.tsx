@@ -84,24 +84,80 @@ function Waveform({ seed }: { seed: number }) {
 
 // ── Bubble ────────────────────────────────────────────────────────────────────
 
+function pickSwedishVoice(): SpeechSynthesisVoice | null {
+  try {
+    const voices = window.speechSynthesis.getVoices() || [];
+    return (
+      voices.find((v) => v.lang?.toLowerCase().replace("_", "-") === "sv-se") ||
+      voices.find((v) => v.lang?.toLowerCase().startsWith("sv")) ||
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
   const sent = msg.role === "user";
   const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch { /* ignore */ } }, []);
+  useEffect(() => {
+    // voice list loads async in most browsers
+    try { window.speechSynthesis?.getVoices(); } catch { /* ignore */ }
+    return () => {
+      try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+      audioRef.current?.pause();
+    };
+  }, []);
+
+  function stop() {
+    try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    setPlaying(false);
+  }
+
+  async function speakViaServer(text: string) {
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const audio = new Audio(URL.createObjectURL(blob));
+      audioRef.current = audio;
+      audio.onended = () => setPlaying(false);
+      audio.onerror = () => setPlaying(false);
+      await audio.play();
+    } catch {
+      setPlaying(false);
+    }
+  }
 
   function toggleAudio() {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    if (playing) { window.speechSynthesis.cancel(); setPlaying(false); return; }
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(msg.text || "Hej!");
-    u.lang = "sv-SE";
-    u.rate = 0.95;
-    u.onend = () => setPlaying(false);
-    u.onerror = () => setPlaying(false);
+    if (typeof window === "undefined") return;
+    if (playing) { stop(); return; }
+    const text = msg.text || "Hej!";
     setPlaying(true);
-    window.speechSynthesis.speak(u);
+
+    const voice = "speechSynthesis" in window ? pickSwedishVoice() : null;
+    if (voice) {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.voice = voice;
+      u.lang = voice.lang || "sv-SE";
+      u.rate = 0.95;
+      u.onend = () => setPlaying(false);
+      u.onerror = () => setPlaying(false);
+      window.speechSynthesis.speak(u);
+      return;
+    }
+    // No Swedish system voice → use the Swedish cloud voice instead of an English one
+    void speakViaServer(text);
   }
+
   return (
     <div className={`flex ${sent?"justify-end":"justify-start"} mb-2`}>
       {isGroup && !sent && (
