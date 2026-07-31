@@ -86,6 +86,22 @@ function Waveform({ seed }: { seed: number }) {
 
 function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
   const sent = msg.role === "user";
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch { /* ignore */ } }, []);
+
+  function toggleAudio() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (playing) { window.speechSynthesis.cancel(); setPlaying(false); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(msg.text || "Hej!");
+    u.lang = "sv-SE";
+    u.rate = 0.95;
+    u.onend = () => setPlaying(false);
+    u.onerror = () => setPlaying(false);
+    setPlaying(true);
+    window.speechSynthesis.speak(u);
+  }
   return (
     <div className={`flex ${sent?"justify-end":"justify-start"} mb-2`}>
       {isGroup && !sent && (
