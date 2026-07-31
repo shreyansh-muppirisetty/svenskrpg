@@ -355,6 +355,10 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
             onKeyDown={e=>e.key==="Enter"&&sendCallMsg()}
             placeholder="Skriv vad du säger…" disabled={view.status==="ringing"}
             className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2 text-sm outline-none focus:border-ring disabled:opacity-40"/>
+          <button onClick={sendCallMsg}
+            className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none">
+            ➤
+          </button>
           <button onClick={hangUp}
             className="rounded-sm border-2 border-border bg-red-500 px-4 py-2 font-pixel text-[9px] text-white shadow-pixel-sm active:translate-y-0.5 active:shadow-none">
             LÄGG PÅ
