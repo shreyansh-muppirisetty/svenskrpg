@@ -409,7 +409,7 @@ function MatchScreen({ state, onChange, onRematch, onBack }: {
     } else {
       // Wrong — flash red briefly
       onChange({ ...state, wrong: [selectedLeft, id], selectedLeft: null, attempts: newAttempts });
-      setTimeout(() => onChange(s => s ? { ...s, wrong: [] } : s), 650);
+      setTimeout(() => onChange({ ...state, wrong: [], selectedLeft: null, attempts: newAttempts }), 650);
     }
   }
 

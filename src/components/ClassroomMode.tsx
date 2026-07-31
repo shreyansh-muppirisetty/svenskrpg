@@ -590,7 +590,7 @@ RULES:
               <div key={i} className={`max-w-[88%] rounded-sm px-3 py-2 text-base ${m.role==="user"?"ml-auto bg-primary text-primary-foreground":"bg-secondary text-foreground"}`}>
                 {m.role==="user"
                   ? m.text.replace(/\[BETYG:\s*[ABCDEF]\]/g,"").trim()
-                  : <ReactMarkdown className="prose prose-sm max-w-none">{m.text.replace(/\[BETYG:\s*[ABCDEF]\]/g,"").trim()}</ReactMarkdown>
+                  : <div className="prose prose-sm max-w-none"><ReactMarkdown>{m.text.replace(/\[BETYG:\s*[ABCDEF]\]/g,"").trim()}</ReactMarkdown></div>
                 }
               </div>
             ))}

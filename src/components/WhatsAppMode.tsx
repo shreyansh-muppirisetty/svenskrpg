@@ -86,6 +86,22 @@ function Waveform({ seed }: { seed: number }) {
 
 function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
   const sent = msg.role === "user";
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch { /* ignore */ } }, []);
+
+  function toggleAudio() {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (playing) { window.speechSynthesis.cancel(); setPlaying(false); return; }
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(msg.text || "Hej!");
+    u.lang = "sv-SE";
+    u.rate = 0.95;
+    u.onend = () => setPlaying(false);
+    u.onerror = () => setPlaying(false);
+    setPlaying(true);
+    window.speechSynthesis.speak(u);
+  }
   return (
     <div className={`flex ${sent?"justify-end":"justify-start"} mb-2`}>
       {isGroup && !sent && (
@@ -106,7 +122,10 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
           )}
           {msg.type==="audio" && (
             <div className="flex items-center gap-2 px-2 py-1" style={{minWidth:180}}>
-              <div className="w-7 h-7 border-2 border-border flex items-center justify-center font-pixel text-[8px] bg-accent text-accent-foreground shrink-0">▶</div>
+              <button type="button" onClick={toggleAudio} aria-label={playing?"Stoppa röstmeddelande":"Spela röstmeddelande"}
+                className="w-7 h-7 border-2 border-border flex items-center justify-center font-pixel text-[8px] bg-accent text-accent-foreground shrink-0 active:translate-y-0.5">
+                {playing ? "■" : "▶"}
+              </button>
               <Waveform seed={msg.id}/>
               <span className="font-pixel text-[7px] text-muted-foreground">{msg.duration||"0:08"}</span>
             </div>
@@ -156,7 +175,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       if (id === "class") {
         const raw = await gemini(key, [{
           role: "user",
-          text: `Simulate a Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Generate 5-7 messages the user missed while offline. Characters: ${CLASS_CHARS}. Rules: very short messages (3-12 words each), no emoji spam, mix Swedish/English, realistic teen topics. Occasionally one is an image or voice note. Return ONLY a JSON array, no other text: [{"name":"Wilma","text":"omg guys","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"training today"},{"name":"Liam","text":"","type":"audio","duration":"0:11"}]`
+          text: `Simulate a Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Generate 5-7 messages the user missed while offline. Characters: ${CLASS_CHARS}. Rules: very short messages (3-12 words each), no emoji spam, mix Swedish/English, realistic teen topics. Occasionally one is an image or voice note. For "audio" messages, "text" MUST contain the spoken Swedish words of the voice note (it is played aloud, never shown). Return ONLY a JSON array, no other text: [{"name":"Wilma","text":"omg guys","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"training today"},{"name":"Liam","text":"hej alla, glöm inte provet imorgon","type":"audio","duration":"0:11"}]`
         }], undefined, 500);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
         arr.forEach(m => add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration}));
@@ -182,7 +201,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         const recent = convos.class.slice(-5).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
         const raw = await gemini(key, [{
           role: "user",
-          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}. Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}. Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
         for (const m of arr) {
