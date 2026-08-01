@@ -30,6 +30,63 @@ function parseArr<T>(raw:string):T[] {
   try{ return JSON.parse(raw.slice(s,e+1)); }catch{ return []; }
 }
 
+// ── Media helpers (Gemini only accepts certain formats) ───────────────────────
+
+function bytesToBase64(bytes:Uint8Array):string{
+  let bin=""; const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode(...bytes.subarray(i,i+CH));
+  return btoa(bin);
+}
+
+// Downscale + re-encode any picked image to JPEG (handles HEIC-less browsers, big photos)
+function imageToJpegBase64(file:File):Promise<{data:string;preview:string}>{
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("Kunde inte läsa bilden"));
+    reader.onload=()=>{
+      const src=reader.result as string;
+      const img=new Image();
+      img.onerror=()=>reject(new Error("Kunde inte läsa bilden"));
+      img.onload=()=>{
+        const max=1024;
+        const scale=Math.min(1,max/Math.max(img.width,img.height));
+        const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
+        const c=document.createElement("canvas"); c.width=w; c.height=h;
+        const ctx=c.getContext("2d");
+        if(!ctx){ reject(new Error("Canvas saknas")); return; }
+        ctx.drawImage(img,0,0,w,h);
+        const jpeg=c.toDataURL("image/jpeg",0.85);
+        resolve({data:jpeg.split(",")[1]??"",preview:jpeg});
+      };
+      img.src=src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Gemini does not accept audio/webm — decode and re-encode the recording as WAV
+async function blobToWavBase64(blob:Blob):Promise<string>{
+  const buf=await blob.arrayBuffer();
+  const AC:typeof AudioContext = window.AudioContext || (window as unknown as {webkitAudioContext:typeof AudioContext}).webkitAudioContext;
+  const ctx=new AC();
+  const decoded=await ctx.decodeAudioData(buf.slice(0));
+  await ctx.close();
+  // mixdown to mono 16-bit PCM
+  const len=decoded.length, chs=decoded.numberOfChannels;
+  const pcm=new Float32Array(len);
+  for(let c=0;c<chs;c++){ const d=decoded.getChannelData(c); for(let i=0;i<len;i++) pcm[i]+=d[i]/chs; }
+  const rate=decoded.sampleRate;
+  const out=new DataView(new ArrayBuffer(44+len*2));
+  const str=(o:number,s:string)=>{ for(let i=0;i<s.length;i++) out.setUint8(o+i,s.charCodeAt(i)); };
+  str(0,"RIFF"); out.setUint32(4,36+len*2,true); str(8,"WAVE"); str(12,"fmt ");
+  out.setUint32(16,16,true); out.setUint16(20,1,true); out.setUint16(22,1,true);
+  out.setUint32(24,rate,true); out.setUint32(28,rate*2,true); out.setUint16(32,2,true); out.setUint16(34,16,true);
+  str(36,"data"); out.setUint32(40,len*2,true);
+  for(let i=0;i<len;i++){ const s=Math.max(-1,Math.min(1,pcm[i])); out.setInt16(44+i*2,s<0?s*0x8000:s*0x7fff,true); }
+  return bytesToBase64(new Uint8Array(out.buffer));
+}
+
+
 // ── Image Generation ──────────────────────────────────────────────────────────
 
 // Generate a relevant image from a text description using pollinations.ai
