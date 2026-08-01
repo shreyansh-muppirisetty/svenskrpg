@@ -417,6 +417,19 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     finally{setTyping(false);}
   }
 
+  // Build a valid Gemini history: no empty parts, no leading model turn
+  function buildHistory(cid:CID):GTurn[]{
+    const turns:GTurn[]=[];
+    for(const m of convos[cid].slice(-8)){
+      const text = m.type==="image" ? (m.role==="user"?"[Användaren skickade en bild]":"[Bild]")
+        : m.type==="audio" ? (m.voiceText||"[Röstmeddelande]")
+        : m.text;
+      if(!text||!text.trim()) continue;
+      turns.push({role:m.role==="user"?"user":"model",parts:[{text}]});
+    }
+    while(turns.length&&turns[0].role==="model") turns.shift();
+    return turns;
+  }
 
   // ── Record audio ─────────────────────────────────────────────────────────────
 
@@ -435,32 +448,28 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
         mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
         mr.onstop=async()=>{
           stream.getTracks().forEach(t=>t.stop());
-          const blob=new Blob(chunksRef.current,{type:"audio/webm"});
+          const blob=new Blob(chunksRef.current,{type:mr.mimeType||"audio/webm"});
           const audioSrc = URL.createObjectURL(blob);
-          
-          // Convert blob to base64 for Gemini
-          const arrayBuffer = await blob.arrayBuffer();
-          const base64Audio = btoa(
-            new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-          );
-          
           add(cid,{role:"user",text:"[Röstmeddelande]",type:"audio",audioSrc});
-          // Trigger AI response with the actual audio bytes
-          handleAudioSent(cid, base64Audio);
+          setTyping(true);
+          try{
+            // Gemini can't read webm/opus — convert to WAV first
+            const wav=await blobToWavBase64(blob);
+            await handleAudioSent(cid, wav);
+          }catch(e){ setErr(e instanceof Error?e.message:"Kunde inte läsa ljudet"); setTyping(false); }
         };
         mr.start(); mrRef.current=mr; setRecording(true);
       }catch{ setErr("Mikrofonåtkomst nekad"); }
     }
   }
 
-  async function handleAudioSent(cid: CID, base64Audio: string) {
+  async function handleAudioSent(cid: CID, wavBase64: string) {
     setTyping(true);
     try{
       if(cid==="class"){
-        // For class chat, send audio to Gemini to understand + get reactions
         const raw=await gemini(key,[{role:"user",parts:[
-          {text:`Klasschatt. Användaren skickade ett röstmeddelande. Transkribera vad som sägs och generera 1-2 korta reaktioner från klasskamrater baserat på innehållet. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"haha lol","type":"text"}]`},
-          {inlineData:{mimeType:"audio/webm",data:base64Audio}}
+          {text:`Klasschatt. Användaren skickade röstmeddelandet nedan. Lyssna på ljudet och generera 1-2 korta reaktioner från klasskamrater som svarar på det som faktiskt sägs. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"haha lol","type":"text"}]`},
+          {inlineData:{mimeType:"audio/wav",data:wavBase64}}
         ]}],undefined,300);
         const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
         for(const m of arr){
@@ -468,14 +477,10 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
           add("class",{role:"contact",sender:m.name,text:m.text||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
         }
       } else {
-        // For 1-on-1, send audio to Gemini so the AI actually hears what was said
-        const history:GTurn[]=convos[cid].slice(-6).map(m=>({
-          role:m.role==="user"?"user":"model" as "user"|"model",
-          parts:[{text:m.type==="audio"?"[Röstmeddelande]":m.text}]
-        }));
+        const history=buildHistory(cid);
         history.push({role:"user",parts:[
-          {text:"[Användaren skickade ett röstmeddelande. Lyssna och svara på det som sägs. Max 1-2 meningar.]"},
-          {inlineData:{mimeType:"audio/webm",data:base64Audio}}
+          {text:"Användaren skickade det här röstmeddelandet. Lyssna på ljudet och svara på det som faktiskt sägs. Max 1-2 meningar, svenska."},
+          {inlineData:{mimeType:"audio/wav",data:wavBase64}}
         ]});
         const reply=await gemini(key,history,PERSONA[cid],120);
         add(cid,{role:"contact",text:reply.trim(),type:"text"});
@@ -483,6 +488,7 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     }catch(e){setErr(e instanceof Error?e.message:"Fel");}
     finally{setTyping(false);}
   }
+
 
   // ── Call ─────────────────────────────────────────────────────────────────────
 
