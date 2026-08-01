@@ -216,7 +216,7 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     try{
       if(cid==="class"){
         const raw=await gemini(key,[{role:"user",parts:[{text:
-          `Simulera en svensk WhatsApp-klasschatt (Klass 8B, 15 år). Generera 5-6 meddelanden som användaren missade offline. Karaktärer: ${CLASS_CHARS}. Regler: väldigt korta (3-12 ord), ingen emoji-spam, svenska, realistiska ämnen. Ibland bild eller röstmeddelande. Returnera BARA JSON: [{"name":"Wilma","text":"omg har ni gjort matten","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"träning idag"},{"name":"Liam","text":"","type":"audio","duration":"0:09","voiceText":"haha typ det värsta jag sett på länge"}]`
+          `Simulera en svensk WhatsApp-klasschatt (Klass 8B, 15 år). Generera 5-6 meddelanden som användaren missade offline. Karaktärer: ${CLASS_CHARS}. Regler: väldigt korta (3-12 ord), ingen emoji-spam, SVENSKA (aldrig engelska), realistiska ämnen. Ibland bild eller röstmeddelande. För röstmeddelanden: voiceText MÅSTE vara på svenska. Returnera BARA JSON: [{"name":"Wilma","text":"omg har ni gjort matten","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"träning idag"},{"name":"Liam","text":"","type":"audio","duration":"0:09","voiceText":"haha typ det värsta jag sett på länge"}]`
         }]}],undefined,500);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
         for (const m of arr) {
@@ -256,7 +256,7 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
       if(cid==="class"){
         const recent=convos.class.slice(-4).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
         const raw=await gemini(key,[{role:"user",parts:[{text:
-          `Klasschatt. Senaste:\n${recent}\nAnvändaren skickade: "${text}"\nGenerera 1-3 korta svar från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Ingen emoji-spam. Svenska. Ibland bild/ljud. BARA JSON: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          `Klasschatt. Senaste:\n${recent}\nAnvändaren skickade: "${text}"\nGenerera 1-3 korta svar från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Ingen emoji-spam. SVENSKA (aldrig engelska). Ibland bild/ljud. För röstmeddelanden: voiceText MÅSTE vara på svenska. BARA JSON: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }]}],undefined,250);
         const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
         for(const m of arr){
