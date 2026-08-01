@@ -90,9 +90,20 @@ function speak(text:string, onEnd?:()=>void){
   window.speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);
   u.lang="sv-SE"; u.rate=1.0;
-  const voices=window.speechSynthesis.getVoices();
-  const sv=voices.find(v=>v.lang.startsWith("sv"));
-  if(sv) u.voice=sv;
+  
+  function setVoice(){
+    const voices=window.speechSynthesis.getVoices();
+    // Try to find a Swedish voice — be very specific
+    const sv=voices.find(v=>v.lang==="sv-SE") || voices.find(v=>v.lang.startsWith("sv"));
+    if(sv) u.voice=sv;
+  }
+  
+  // Voices may load async, so try immediately and also on voiceschanged
+  setVoice();
+  if(window.speechSynthesis.getVoices().length===0){
+    window.speechSynthesis.onvoiceschanged=setVoice;
+  }
+  
   if(onEnd) u.onend=onEnd;
   window.speechSynthesis.speak(u);
 }
