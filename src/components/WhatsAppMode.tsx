@@ -385,48 +385,38 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
   async function onFileChange(e:React.ChangeEvent<HTMLInputElement>){
     if(view.screen!=="chat") return;
     const cid=view.cid;
-    const file=e.target.files?.[0]; if(!file) return;
-    
-    const reader=new FileReader();
-    reader.onload=async()=>{
-      const imageSrc = reader.result as string;
-      const base64Data = imageSrc.split(',')[1]; // Remove data:image/...;base64, prefix
-      
-      // Add user's image to chat
-      add(cid,{role:"user",text:"[Bild]",type:"image",imageSrc});
-      setTyping(true);
-      
-      try{
-        if(cid==="class"){
-          // For class chat, describe what the user sent and have classmates react
-          const raw=await gemini(key,[{role:"user",parts:[
-            {text:`Klasschatt. Användaren skickade en bild. Beskriv kort vad bilden visar (1-2 ord) och generera 1-2 reaktioner från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"omg vad fint","type":"text"}]`},
-            {inlineData:{mimeType:file.type,data:base64Data}}
-          ]}],undefined,250);
-          const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
-          for(const m of arr){
-            await new Promise(r=>setTimeout(r,500+Math.random()*800));
-            add("class",{role:"contact",sender:m.name,text:m.text||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
-          }
-        } else {
-          // For 1-on-1 chats, the AI sees the image and responds to it
-          const history:GTurn[]=convos[cid].slice(-6).map(m=>({
-            role:m.role==="user"?"user":"model" as "user"|"model",
-            parts:[{text:m.type==="image"?"[Användaren skickade en bild]":m.text}]
-          }));
-          history.push({role:"user",parts:[
-            {text:"[Användaren skickade en bild. Reagera på den. Max 1-2 meningar.]"},
-            {inlineData:{mimeType:file.type,data:base64Data}}
-          ]});
-          const reply=await gemini(key,history,PERSONA[cid],120);
-          add(cid,{role:"contact",text:reply.trim(),type:"text"});
-        }
-      }catch(e){setErr(e instanceof Error?e.message:"Fel");}
-      finally{setTyping(false);}
-    };
-    reader.readAsDataURL(file);
+    const file=e.target.files?.[0];
     e.target.value="";
+    if(!file) return;
+
+    setTyping(true);
+    try{
+      const {data:base64Data,preview}=await imageToJpegBase64(file);
+      add(cid,{role:"user",text:"[Bild]",type:"image",imageSrc:preview});
+
+      if(cid==="class"){
+        const raw=await gemini(key,[{role:"user",parts:[
+          {text:`Klasschatt. Användaren skickade bilden nedan. Titta på bilden och generera 1-2 reaktioner från klasskamrater som tydligt visar att de ser vad som är på bilden. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"omg vad fint","type":"text"}]`},
+          {inlineData:{mimeType:"image/jpeg",data:base64Data}}
+        ]}],undefined,250);
+        const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
+        for(const m of arr){
+          await new Promise(r=>setTimeout(r,500+Math.random()*800));
+          add("class",{role:"contact",sender:m.name,text:m.text||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
+        }
+      } else {
+        const history=buildHistory(cid);
+        history.push({role:"user",parts:[
+          {text:"Användaren skickade den här bilden. Titta på den och reagera på vad du faktiskt ser. Max 1-2 meningar, svenska."},
+          {inlineData:{mimeType:"image/jpeg",data:base64Data}}
+        ]});
+        const reply=await gemini(key,history,PERSONA[cid],120);
+        add(cid,{role:"contact",text:reply.trim(),type:"text"});
+      }
+    }catch(e){setErr(e instanceof Error?e.message:"Fel");}
+    finally{setTyping(false);}
   }
+
 
   // ── Record audio ─────────────────────────────────────────────────────────────
 
