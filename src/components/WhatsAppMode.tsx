@@ -355,6 +355,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
 
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
+      {overlay}
       <div className="pixel-panel flex items-center gap-3 rounded-sm bg-card p-3 mb-3 shrink-0">
         <button onClick={()=>setActive(null)} className="font-pixel text-[9px] text-muted-foreground mr-1">← BACK</button>
         <div className="w-9 h-9 border-2 border-border flex items-center justify-center font-pixel text-[8px] text-white shrink-0"
@@ -365,7 +366,15 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
             {typing ? "skriver..." : contact!.sub}
           </p>
         </div>
+        {!isGroup && (
+          <button type="button" aria-label={`Ring ${contact!.name}`} disabled={!key}
+            onClick={()=>setCalling(active)}
+            className="h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+            📞
+          </button>
+        )}
       </div>
+
 
       {err && <p className="font-pixel text-[8px] text-destructive mb-2 px-1">✗ {err}</p>}
 
