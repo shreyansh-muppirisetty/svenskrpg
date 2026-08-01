@@ -7,17 +7,18 @@ const API  = "https://generativelanguage.googleapis.com/v1beta/models";
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const loadKey = () => { try { return localStorage.getItem(KEY_STORE)??""; } catch { return ""; } };
 
-type GTurn = { role:"user"|"model"; text:string };
+type GPart = { text?: string; inlineData?: { mimeType: string; data: string } };
+type GTurn = { role:"user"|"model"; parts: GPart[] };
 async function gemini(key:string, turns:GTurn[], system?:string, max=200) {
   const body:Record<string,unknown> = {
-    contents: turns.map(t=>({role:t.role,parts:[{text:t.text}]})),
+    contents: turns.map(t=>({role:t.role,parts:t.parts})),
     generationConfig:{temperature:0.85,maxOutputTokens:max},
   };
   if(system) body.system_instruction={parts:[{text:system}]};
   const r = await fetch(`${API}/${MODEL}:generateContent?key=${key}`,{
     method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),
   });
-  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  if(!r.ok){ const t=await r.text().catch(()=>""); throw new Error(`HTTP ${r.status}${t?`: ${t.slice(0,200)}`:""}`); }
   const d = await r.json();
   const t = d.candidates?.[0]?.content?.parts?.[0]?.text;
   if(!t) throw new Error("No response");
@@ -27,6 +28,71 @@ function parseArr<T>(raw:string):T[] {
   const s=raw.indexOf("["),e=raw.lastIndexOf("]");
   if(s<0) return [];
   try{ return JSON.parse(raw.slice(s,e+1)); }catch{ return []; }
+}
+
+// ── Media helpers (Gemini only accepts certain formats) ───────────────────────
+
+function bytesToBase64(bytes:Uint8Array):string{
+  let bin=""; const CH=0x8000;
+  for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode(...bytes.subarray(i,i+CH));
+  return btoa(bin);
+}
+
+// Downscale + re-encode any picked image to JPEG (handles HEIC-less browsers, big photos)
+function imageToJpegBase64(file:File):Promise<{data:string;preview:string}>{
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("Kunde inte läsa bilden"));
+    reader.onload=()=>{
+      const src=reader.result as string;
+      const img=new Image();
+      img.onerror=()=>reject(new Error("Kunde inte läsa bilden"));
+      img.onload=()=>{
+        const max=1024;
+        const scale=Math.min(1,max/Math.max(img.width,img.height));
+        const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
+        const c=document.createElement("canvas"); c.width=w; c.height=h;
+        const ctx=c.getContext("2d");
+        if(!ctx){ reject(new Error("Canvas saknas")); return; }
+        ctx.drawImage(img,0,0,w,h);
+        const jpeg=c.toDataURL("image/jpeg",0.85);
+        resolve({data:jpeg.split(",")[1]??"",preview:jpeg});
+      };
+      img.src=src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Gemini does not accept audio/webm — decode and re-encode the recording as WAV
+async function blobToWavBase64(blob:Blob):Promise<string>{
+  const buf=await blob.arrayBuffer();
+  const AC:typeof AudioContext = window.AudioContext || (window as unknown as {webkitAudioContext:typeof AudioContext}).webkitAudioContext;
+  const ctx=new AC();
+  const decoded=await ctx.decodeAudioData(buf.slice(0));
+  await ctx.close();
+  // mixdown to mono 16-bit PCM
+  const len=decoded.length, chs=decoded.numberOfChannels;
+  const pcm=new Float32Array(len);
+  for(let c=0;c<chs;c++){ const d=decoded.getChannelData(c); for(let i=0;i<len;i++) pcm[i]+=d[i]/chs; }
+  const rate=decoded.sampleRate;
+  const out=new DataView(new ArrayBuffer(44+len*2));
+  const str=(o:number,s:string)=>{ for(let i=0;i<s.length;i++) out.setUint8(o+i,s.charCodeAt(i)); };
+  str(0,"RIFF"); out.setUint32(4,36+len*2,true); str(8,"WAVE"); str(12,"fmt ");
+  out.setUint32(16,16,true); out.setUint16(20,1,true); out.setUint16(22,1,true);
+  out.setUint32(24,rate,true); out.setUint32(28,rate*2,true); out.setUint16(32,2,true); out.setUint16(34,16,true);
+  str(36,"data"); out.setUint32(40,len*2,true);
+  for(let i=0;i<len;i++){ const s=Math.max(-1,Math.min(1,pcm[i])); out.setInt16(44+i*2,s<0?s*0x8000:s*0x7fff,true); }
+  return bytesToBase64(new Uint8Array(out.buffer));
+}
+
+
+// ── Image Generation ──────────────────────────────────────────────────────────
+
+// Generate a relevant image from a text description using pollinations.ai
+function generateImageUrl(prompt: string, seed: number = 42): string {
+  const encoded = encodeURIComponent(prompt);
+  return `https://image.pollinations.ai/prompt/${encoded}?seed=${seed}&width=400&height=280&nologo=true`;
 }
 
 // ── Contacts ──────────────────────────────────────────────────────────────────
@@ -77,13 +143,48 @@ function nameColor(n=""){
   let h=0; for(const c of n) h=((h<<5)-h+c.charCodeAt(0))|0;
   return p[Math.abs(h)%p.length];
 }
+// ── Web TTS ───────────────────────────────────────────────────────────────────
+
+// Use Google Translate TTS for proper Swedish pronunciation
 function speak(text:string, onEnd?:()=>void){
+  // Cancel any playing audio
+  const existing = document.getElementById("web-tts-audio") as HTMLAudioElement | null;
+  if(existing){ existing.pause(); existing.remove(); }
+  
+  // Build Google Translate TTS URL (max ~200 chars per request)
+  const chunkSize = 180;
+  const chunks: string[] = [];
+  for(let i=0;i<text.length;i+=chunkSize){
+    chunks.push(text.slice(i,i+chunkSize));
+  }
+  
+  let currentChunk = 0;
+  const audio = new Audio();
+  audio.id = "web-tts-audio";
+  
+  function playNext(){
+    if(currentChunk >= chunks.length){
+      if(onEnd) onEnd();
+      return;
+    }
+    const encoded = encodeURIComponent(chunks[currentChunk]);
+    audio.src = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=sv&client=tw-ob`;
+    audio.play().catch(()=>{
+      // Fallback to browser TTS if web TTS fails
+      fallbackSpeak(text, onEnd);
+    });
+    currentChunk++;
+  }
+  
+  audio.onended = playNext;
+  playNext();
+}
+
+// Fallback to browser native TTS if web TTS fails
+function fallbackSpeak(text:string, onEnd?:()=>void){
   window.speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);
-  u.lang="sv-SE"; u.rate=1.0;
-  const voices=window.speechSynthesis.getVoices();
-  const sv=voices.find(v=>v.lang.startsWith("sv"));
-  if(sv) u.voice=sv;
+  u.lang="sv-SE"; u.rate=0.9;
   if(onEnd) u.onend=onEnd;
   window.speechSynthesis.speak(u);
 }
@@ -122,8 +223,7 @@ function Bubble({msg,isGroup}:{msg:Msg;isGroup:boolean}){
         <div className="border-2 border-border shadow-pixel-sm"
           style={{background:sent?"var(--accent)":"var(--card)",padding:msg.type==="image"?2:"6px 10px 4px"}}>
           {msg.type==="image"&&(
-            <img src={msg.imageSrc??`https://picsum.photos/seed/${(msg.sender||"u")+msg.id}/200/140`}
-              alt={msg.imageDesc||"photo"} style={{width:200,height:140,objectFit:"cover",display:"block"}}/>
+            <img src={msg.imageSrc} alt={msg.imageDesc||"photo"} style={{width:200,height:140,objectFit:"cover",display:"block"}}/>
           )}
           {msg.type==="audio"&&msg.audioSrc&&(
             <audio controls src={msg.audioSrc} style={{width:200,height:32}}/>
@@ -170,13 +270,18 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
   const chunksRef=useRef<Blob[]>([]);
   const timerRef=useRef<ReturnType<typeof setInterval>|null>(null);
 
-  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[convos,view,typing]);
+  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[view,typing]);
 
   useEffect(()=>{
     if(view.screen==="call"&&view.status==="connected"){
       timerRef.current=setInterval(()=>setCallTimer(t=>t+1),1000);
     }
-    return()=>{if(timerRef.current)clearInterval(timerRef.current);};
+    return()=>{
+      if(timerRef.current){
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   },[view]);
 
   function add(cid:CID,msg:Omit<Msg,"id"|"time">){
@@ -184,6 +289,13 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
   }
 
   function clearAll(){setConvos({johnny:[],jacob:[],sam:[],class:[]});setUnread({johnny:0,jacob:0,sam:0,class:0});setView({screen:"list"});}
+
+  // Helper to get a consistent seed for image generation per character
+  function msgIdForSeed(name: string): number {
+    let h = 0;
+    for (const c of name) h = ((h << 5) - h + c.charCodeAt(0)) | 0;
+    return Math.abs(h);
+  }
 
   // ── Open chat ────────────────────────────────────────────────────────────────
 
@@ -195,17 +307,31 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     setTyping(true);
     try{
       if(cid==="class"){
-        const raw=await gemini(key,[{role:"user",text:
-          `Simulera en svensk WhatsApp-klasschatt (Klass 8B, 15 år). Generera 5-6 meddelanden som användaren missade offline. Karaktärer: ${CLASS_CHARS}. Regler: väldigt korta (3-12 ord), ingen emoji-spam, svenska, realistiska ämnen. Ibland bild eller röstmeddelande. Returnera BARA JSON: [{"name":"Wilma","text":"omg har ni gjort matten","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"träning idag"},{"name":"Liam","text":"","type":"audio","duration":"0:09","voiceText":"haha typ det värsta jag sett på länge"}]`
-        }],undefined,500);
-        parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw)
-          .forEach(m=>add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText}));
+        const raw=await gemini(key,[{role:"user",parts:[{text:
+          `Simulera en svensk WhatsApp-klasschatt (Klass 8B, 15 år). Generera 5-6 meddelanden som användaren missade offline. Karaktärer: ${CLASS_CHARS}. Regler: väldigt korta (3-12 ord), ingen emoji-spam, SVENSKA (aldrig engelska), realistiska ämnen. Ibland bild eller röstmeddelande. För röstmeddelanden: voiceText MÅSTE vara på svenska. Returnera BARA JSON: [{"name":"Wilma","text":"omg har ni gjort matten","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"träning idag"},{"name":"Liam","text":"","type":"audio","duration":"0:09","voiceText":"haha typ det värsta jag sett på länge"}]`
+        }]}],undefined,500);
+        const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
+        for (const m of arr) {
+          const imageSrc = m.type === "image" && m.imageDesc 
+            ? generateImageUrl(m.imageDesc, msgIdForSeed(m.name)) 
+            : undefined;
+          add("class",{
+            role:"contact",
+            sender:m.name,
+            text:m.text||m.imageDesc||"",
+            type:(m.type as Msg["type"])||"text",
+            imageDesc:m.imageDesc,
+            imageSrc,
+            duration:m.duration,
+            voiceText:m.voiceText
+          });
+        }
       } else {
-        const reply=await gemini(key,[{role:"user",text:"Skicka ett kort öppningsmeddelande som om du bara textar spontant. Max 1 kort mening. Inga citattecken."}],PERSONA[cid],60);
+        const reply=await gemini(key,[{role:"user",parts:[{text:"Skicka ett kort öppningsmeddelande som om du bara textar spontant. Max 1 kort mening. Inga citattecken."}]}],PERSONA[cid],60);
         add(cid,{role:"contact",text:reply.trim(),type:"text"});
       }
     }catch(e){setErr(e instanceof Error?e.message:"Fel");}
-    setTyping(false);
+    finally{setTyping(false);}
   }
 
   // ── Send text ────────────────────────────────────────────────────────────────
@@ -221,34 +347,88 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     try{
       if(cid==="class"){
         const recent=convos.class.slice(-4).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
-        const raw=await gemini(key,[{role:"user",text:
-          `Klasschatt. Senaste:\n${recent}\nAnvändaren skickade: "${text}"\nGenerera 1-3 korta svar från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Ingen emoji-spam. Svenska. Ibland bild/ljud. BARA JSON: [{"name":"Ella","text":"omg fr","type":"text"}]`
-        }],undefined,250);
+        const raw=await gemini(key,[{role:"user",parts:[{text:
+          `Klasschatt. Senaste:\n${recent}\nAnvändaren skickade: "${text}"\nGenerera 1-3 korta svar från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Ingen emoji-spam. SVENSKA (aldrig engelska). Ibland bild/ljud. För röstmeddelanden: voiceText MÅSTE vara på svenska. BARA JSON: [{"name":"Ella","text":"omg fr","type":"text"}]`
+        }]}],undefined,250);
         const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
         for(const m of arr){
           await new Promise(r=>setTimeout(r,500+Math.random()*800));
-          add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
+          const imageSrc = m.type === "image" && m.imageDesc 
+            ? generateImageUrl(m.imageDesc, msgIdForSeed(m.name) + Date.now()) 
+            : undefined;
+          add("class",{
+            role:"contact",
+            sender:m.name,
+            text:m.text||m.imageDesc||"",
+            type:(m.type as Msg["type"])||"text",
+            imageDesc:m.imageDesc,
+            imageSrc,
+            duration:m.duration,
+            voiceText:m.voiceText
+          });
         }
       } else {
-        const history:GTurn[]=convos[cid].slice(-10).map(m=>({role:m.role==="user"?"user":"model" as "user"|"model",text:m.text}));
-        history.push({role:"user",text});
+        const history:GTurn[]=convos[cid].slice(-10).map(m=>({
+          role:m.role==="user"?"user":"model" as "user"|"model",
+          parts:[{text:m.text}]
+        }));
+        history.push({role:"user",parts:[{text}]});
         const reply=await gemini(key,history,PERSONA[cid],100);
         add(cid,{role:"contact",text:reply.trim(),type:"text"});
       }
     }catch(e){setErr(e instanceof Error?e.message:"Fel");}
-    setTyping(false);
+    finally{setTyping(false);}
   }
 
   // ── Send photo ───────────────────────────────────────────────────────────────
 
-  function onFileChange(e:React.ChangeEvent<HTMLInputElement>){
+  async function onFileChange(e:React.ChangeEvent<HTMLInputElement>){
     if(view.screen!=="chat") return;
     const cid=view.cid;
-    const file=e.target.files?.[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=()=>{ add(cid,{role:"user",text:"",type:"image",imageSrc:reader.result as string}); };
-    reader.readAsDataURL(file);
+    const file=e.target.files?.[0];
     e.target.value="";
+    if(!file) return;
+
+    setTyping(true);
+    try{
+      const {data:base64Data,preview}=await imageToJpegBase64(file);
+      add(cid,{role:"user",text:"[Bild]",type:"image",imageSrc:preview});
+
+      if(cid==="class"){
+        const raw=await gemini(key,[{role:"user",parts:[
+          {text:`Klasschatt. Användaren skickade bilden nedan. Titta på bilden och generera 1-2 reaktioner från klasskamrater som tydligt visar att de ser vad som är på bilden. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"omg vad fint","type":"text"}]`},
+          {inlineData:{mimeType:"image/jpeg",data:base64Data}}
+        ]}],undefined,250);
+        const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
+        for(const m of arr){
+          await new Promise(r=>setTimeout(r,500+Math.random()*800));
+          add("class",{role:"contact",sender:m.name,text:m.text||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
+        }
+      } else {
+        const history=buildHistory(cid);
+        history.push({role:"user",parts:[
+          {text:"Användaren skickade den här bilden. Titta på den och reagera på vad du faktiskt ser. Max 1-2 meningar, svenska."},
+          {inlineData:{mimeType:"image/jpeg",data:base64Data}}
+        ]});
+        const reply=await gemini(key,history,PERSONA[cid],120);
+        add(cid,{role:"contact",text:reply.trim(),type:"text"});
+      }
+    }catch(e){setErr(e instanceof Error?e.message:"Fel");}
+    finally{setTyping(false);}
+  }
+
+  // Build a valid Gemini history: no empty parts, no leading model turn
+  function buildHistory(cid:CID):GTurn[]{
+    const turns:GTurn[]=[];
+    for(const m of convos[cid].slice(-8)){
+      const text = m.type==="image" ? (m.role==="user"?"[Användaren skickade en bild]":"[Bild]")
+        : m.type==="audio" ? (m.voiceText||"[Röstmeddelande]")
+        : m.text;
+      if(!text||!text.trim()) continue;
+      turns.push({role:m.role==="user"?"user":"model",parts:[{text}]});
+    }
+    while(turns.length&&turns[0].role==="model") turns.shift();
+    return turns;
   }
 
   // ── Record audio ─────────────────────────────────────────────────────────────
@@ -257,22 +437,58 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     if(view.screen!=="chat") return;
     const {cid}=view;
     if(recording){
-      mrRef.current?.stop(); setRecording(false);
+      mrRef.current?.stop(); 
+      mrRef.current = null;
+      setRecording(false);
     } else {
       try{
         const stream=await navigator.mediaDevices.getUserMedia({audio:true});
         const mr=new MediaRecorder(stream);
         chunksRef.current=[];
         mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
-        mr.onstop=()=>{
+        mr.onstop=async()=>{
           stream.getTracks().forEach(t=>t.stop());
-          const blob=new Blob(chunksRef.current,{type:"audio/webm"});
-          add(cid,{role:"user",text:"",type:"audio",audioSrc:URL.createObjectURL(blob)});
+          const blob=new Blob(chunksRef.current,{type:mr.mimeType||"audio/webm"});
+          const audioSrc = URL.createObjectURL(blob);
+          add(cid,{role:"user",text:"[Röstmeddelande]",type:"audio",audioSrc});
+          setTyping(true);
+          try{
+            // Gemini can't read webm/opus — convert to WAV first
+            const wav=await blobToWavBase64(blob);
+            await handleAudioSent(cid, wav);
+          }catch(e){ setErr(e instanceof Error?e.message:"Kunde inte läsa ljudet"); setTyping(false); }
         };
         mr.start(); mrRef.current=mr; setRecording(true);
       }catch{ setErr("Mikrofonåtkomst nekad"); }
     }
   }
+
+  async function handleAudioSent(cid: CID, wavBase64: string) {
+    setTyping(true);
+    try{
+      if(cid==="class"){
+        const raw=await gemini(key,[{role:"user",parts:[
+          {text:`Klasschatt. Användaren skickade röstmeddelandet nedan. Lyssna på ljudet och generera 1-2 korta reaktioner från klasskamrater som svarar på det som faktiskt sägs. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"haha lol","type":"text"}]`},
+          {inlineData:{mimeType:"audio/wav",data:wavBase64}}
+        ]}],undefined,300);
+        const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
+        for(const m of arr){
+          await new Promise(r=>setTimeout(r,500+Math.random()*800));
+          add("class",{role:"contact",sender:m.name,text:m.text||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
+        }
+      } else {
+        const history=buildHistory(cid);
+        history.push({role:"user",parts:[
+          {text:"Användaren skickade det här röstmeddelandet. Lyssna på ljudet och svara på det som faktiskt sägs. Max 1-2 meningar, svenska."},
+          {inlineData:{mimeType:"audio/wav",data:wavBase64}}
+        ]});
+        const reply=await gemini(key,history,PERSONA[cid],120);
+        add(cid,{role:"contact",text:reply.trim(),type:"text"});
+      }
+    }catch(e){setErr(e instanceof Error?e.message:"Fel");}
+    finally{setTyping(false);}
+  }
+
 
   // ── Call ─────────────────────────────────────────────────────────────────────
 
@@ -284,7 +500,7 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     await new Promise(r=>setTimeout(r,2000));
     setView({screen:"call",cid,status:"connected",callerId:callerNames[cid]});
     try{
-      const greeting=await gemini(key,[{role:"user",text:"Hälsa kort, du svarade precis i telefon. 1 mycket kort mening."}],CALL_PERSONA[cid]||CALL_PERSONA.class,50);
+      const greeting=await gemini(key,[{role:"user",parts:[{text:"Hälsa kort, du svarade precis i telefon. 1 mycket kort mening."}]}],CALL_PERSONA[cid]||CALL_PERSONA.class,50);
       const g=greeting.trim();
       setCallLog(l=>[...l,{role:"contact",text:g,speaker:callerNames[cid]}]);
       speak(g);
@@ -298,19 +514,22 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     setCallLog(l=>[...l,{role:"user",text}]);
     setCallTyping(true);
     try{
-      const history:GTurn[]=callLog.slice(-6).map(m=>({role:m.role==="user"?"user":"model" as "user"|"model",text:m.text}));
-      history.push({role:"user",text});
+      const history:GTurn[]=callLog.slice(-6).map(m=>({role:m.role==="user"?"user":"model" as "user"|"model",parts:[{text:m.text}]}));
+      history.push({role:"user",parts:[{text}]});
       const reply=await gemini(key,history,CALL_PERSONA[view.cid]||CALL_PERSONA.class,50);
       const r=reply.trim();
       setCallLog(l=>[...l,{role:"contact",text:r,speaker:view.callerId}]);
       speak(r);
     }catch{ /* ignore */ }
-    setCallTyping(false);
+    finally{setCallTyping(false);}
   }
 
   function hangUp(){
     window.speechSynthesis.cancel();
-    if(timerRef.current) clearInterval(timerRef.current);
+    if(timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     const cid=view.screen==="call"?view.cid:"johnny";
     setView({screen:"chat",cid});
   }
