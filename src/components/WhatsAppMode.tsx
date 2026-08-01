@@ -7,10 +7,11 @@ const API  = "https://generativelanguage.googleapis.com/v1beta/models";
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const loadKey = () => { try { return localStorage.getItem(KEY_STORE)??""; } catch { return ""; } };
 
-type GTurn = { role:"user"|"model"; text:string };
+type GPart = { text?: string; inlineData?: { mimeType: string; data: string } };
+type GTurn = { role:"user"|"model"; parts: GPart[] };
 async function gemini(key:string, turns:GTurn[], system?:string, max=200) {
   const body:Record<string,unknown> = {
-    contents: turns.map(t=>({role:t.role,parts:[{text:t.text}]})),
+    contents: turns.map(t=>({role:t.role,parts:t.parts})),
     generationConfig:{temperature:0.85,maxOutputTokens:max},
   };
   if(system) body.system_instruction={parts:[{text:system}]};
@@ -27,6 +28,14 @@ function parseArr<T>(raw:string):T[] {
   const s=raw.indexOf("["),e=raw.lastIndexOf("]");
   if(s<0) return [];
   try{ return JSON.parse(raw.slice(s,e+1)); }catch{ return []; }
+}
+
+// ── Image Generation ──────────────────────────────────────────────────────────
+
+// Generate a relevant image from a text description using pollinations.ai
+function generateImageUrl(prompt: string, seed: number = 42): string {
+  const encoded = encodeURIComponent(prompt);
+  return `https://image.pollinations.ai/prompt/${encoded}?seed=${seed}&width=400&height=280&nologo=true`;
 }
 
 // ── Contacts ──────────────────────────────────────────────────────────────────
@@ -122,8 +131,7 @@ function Bubble({msg,isGroup}:{msg:Msg;isGroup:boolean}){
         <div className="border-2 border-border shadow-pixel-sm"
           style={{background:sent?"var(--accent)":"var(--card)",padding:msg.type==="image"?2:"6px 10px 4px"}}>
           {msg.type==="image"&&(
-            <img src={msg.imageSrc??`https://picsum.photos/seed/${(msg.sender||"u")+msg.id}/200/140`}
-              alt={msg.imageDesc||"photo"} style={{width:200,height:140,objectFit:"cover",display:"block"}}/>
+            <img src={msg.imageSrc} alt={msg.imageDesc||"photo"} style={{width:200,height:140,objectFit:"cover",display:"block"}}/>
           )}
           {msg.type==="audio"&&msg.audioSrc&&(
             <audio controls src={msg.audioSrc} style={{width:200,height:32}}/>
@@ -170,13 +178,18 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
   const chunksRef=useRef<Blob[]>([]);
   const timerRef=useRef<ReturnType<typeof setInterval>|null>(null);
 
-  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[convos,view,typing]);
+  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[view,typing]);
 
   useEffect(()=>{
     if(view.screen==="call"&&view.status==="connected"){
       timerRef.current=setInterval(()=>setCallTimer(t=>t+1),1000);
     }
-    return()=>{if(timerRef.current)clearInterval(timerRef.current);};
+    return()=>{
+      if(timerRef.current){
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   },[view]);
 
   function add(cid:CID,msg:Omit<Msg,"id"|"time">){
@@ -184,6 +197,13 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
   }
 
   function clearAll(){setConvos({johnny:[],jacob:[],sam:[],class:[]});setUnread({johnny:0,jacob:0,sam:0,class:0});setView({screen:"list"});}
+
+  // Helper to get a consistent seed for image generation per character
+  function msgIdForSeed(name: string): number {
+    let h = 0;
+    for (const c of name) h = ((h << 5) - h + c.charCodeAt(0)) | 0;
+    return Math.abs(h);
+  }
 
   // ── Open chat ────────────────────────────────────────────────────────────────
 
@@ -195,17 +215,31 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     setTyping(true);
     try{
       if(cid==="class"){
-        const raw=await gemini(key,[{role:"user",text:
+        const raw=await gemini(key,[{role:"user",parts:[{text:
           `Simulera en svensk WhatsApp-klasschatt (Klass 8B, 15 år). Generera 5-6 meddelanden som användaren missade offline. Karaktärer: ${CLASS_CHARS}. Regler: väldigt korta (3-12 ord), ingen emoji-spam, svenska, realistiska ämnen. Ibland bild eller röstmeddelande. Returnera BARA JSON: [{"name":"Wilma","text":"omg har ni gjort matten","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"träning idag"},{"name":"Liam","text":"","type":"audio","duration":"0:09","voiceText":"haha typ det värsta jag sett på länge"}]`
-        }],undefined,500);
-        parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw)
-          .forEach(m=>add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText}));
+        }]}],undefined,500);
+        const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
+        for (const m of arr) {
+          const imageSrc = m.type === "image" && m.imageDesc 
+            ? generateImageUrl(m.imageDesc, msgIdForSeed(m.name)) 
+            : undefined;
+          add("class",{
+            role:"contact",
+            sender:m.name,
+            text:m.text||m.imageDesc||"",
+            type:(m.type as Msg["type"])||"text",
+            imageDesc:m.imageDesc,
+            imageSrc,
+            duration:m.duration,
+            voiceText:m.voiceText
+          });
+        }
       } else {
-        const reply=await gemini(key,[{role:"user",text:"Skicka ett kort öppningsmeddelande som om du bara textar spontant. Max 1 kort mening. Inga citattecken."}],PERSONA[cid],60);
+        const reply=await gemini(key,[{role:"user",parts:[{text:"Skicka ett kort öppningsmeddelande som om du bara textar spontant. Max 1 kort mening. Inga citattecken."}]}],PERSONA[cid],60);
         add(cid,{role:"contact",text:reply.trim(),type:"text"});
       }
     }catch(e){setErr(e instanceof Error?e.message:"Fel");}
-    setTyping(false);
+    finally{setTyping(false);}
   }
 
   // ── Send text ────────────────────────────────────────────────────────────────
@@ -221,32 +255,83 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     try{
       if(cid==="class"){
         const recent=convos.class.slice(-4).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
-        const raw=await gemini(key,[{role:"user",text:
+        const raw=await gemini(key,[{role:"user",parts:[{text:
           `Klasschatt. Senaste:\n${recent}\nAnvändaren skickade: "${text}"\nGenerera 1-3 korta svar från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Ingen emoji-spam. Svenska. Ibland bild/ljud. BARA JSON: [{"name":"Ella","text":"omg fr","type":"text"}]`
-        }],undefined,250);
+        }]}],undefined,250);
         const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
         for(const m of arr){
           await new Promise(r=>setTimeout(r,500+Math.random()*800));
-          add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
+          const imageSrc = m.type === "image" && m.imageDesc 
+            ? generateImageUrl(m.imageDesc, msgIdForSeed(m.name) + Date.now()) 
+            : undefined;
+          add("class",{
+            role:"contact",
+            sender:m.name,
+            text:m.text||m.imageDesc||"",
+            type:(m.type as Msg["type"])||"text",
+            imageDesc:m.imageDesc,
+            imageSrc,
+            duration:m.duration,
+            voiceText:m.voiceText
+          });
         }
       } else {
-        const history:GTurn[]=convos[cid].slice(-10).map(m=>({role:m.role==="user"?"user":"model" as "user"|"model",text:m.text}));
-        history.push({role:"user",text});
+        const history:GTurn[]=convos[cid].slice(-10).map(m=>({
+          role:m.role==="user"?"user":"model" as "user"|"model",
+          parts:[{text:m.text}]
+        }));
+        history.push({role:"user",parts:[{text}]});
         const reply=await gemini(key,history,PERSONA[cid],100);
         add(cid,{role:"contact",text:reply.trim(),type:"text"});
       }
     }catch(e){setErr(e instanceof Error?e.message:"Fel");}
-    setTyping(false);
+    finally{setTyping(false);}
   }
 
   // ── Send photo ───────────────────────────────────────────────────────────────
 
-  function onFileChange(e:React.ChangeEvent<HTMLInputElement>){
+  async function onFileChange(e:React.ChangeEvent<HTMLInputElement>){
     if(view.screen!=="chat") return;
     const cid=view.cid;
     const file=e.target.files?.[0]; if(!file) return;
+    
     const reader=new FileReader();
-    reader.onload=()=>{ add(cid,{role:"user",text:"",type:"image",imageSrc:reader.result as string}); };
+    reader.onload=async()=>{
+      const imageSrc = reader.result as string;
+      const base64Data = imageSrc.split(',')[1]; // Remove data:image/...;base64, prefix
+      
+      // Add user's image to chat
+      add(cid,{role:"user",text:"[Bild]",type:"image",imageSrc});
+      setTyping(true);
+      
+      try{
+        if(cid==="class"){
+          // For class chat, describe what the user sent and have classmates react
+          const raw=await gemini(key,[{role:"user",parts:[
+            {text:`Klasschatt. Användaren skickade en bild. Beskriv kort vad bilden visar (1-2 ord) och generera 1-2 reaktioner från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"omg vad fint","type":"text"}]`},
+            {inlineData:{mimeType:file.type,data:base64Data}}
+          ]}],undefined,250);
+          const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
+          for(const m of arr){
+            await new Promise(r=>setTimeout(r,500+Math.random()*800));
+            add("class",{role:"contact",sender:m.name,text:m.text||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
+          }
+        } else {
+          // For 1-on-1 chats, the AI sees the image and responds to it
+          const history:GTurn[]=convos[cid].slice(-6).map(m=>({
+            role:m.role==="user"?"user":"model" as "user"|"model",
+            parts:[{text:m.type==="image"?"[Användaren skickade en bild]":m.text}]
+          }));
+          history.push({role:"user",parts:[
+            {text:"[Användaren skickade en bild. Reagera på den. Max 1-2 meningar.]"},
+            {inlineData:{mimeType:file.type,data:base64Data}}
+          ]});
+          const reply=await gemini(key,history,PERSONA[cid],120);
+          add(cid,{role:"contact",text:reply.trim(),type:"text"});
+        }
+      }catch(e){setErr(e instanceof Error?e.message:"Fel");}
+      finally{setTyping(false);}
+    };
     reader.readAsDataURL(file);
     e.target.value="";
   }
@@ -257,7 +342,9 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     if(view.screen!=="chat") return;
     const {cid}=view;
     if(recording){
-      mrRef.current?.stop(); setRecording(false);
+      mrRef.current?.stop(); 
+      mrRef.current = null;
+      setRecording(false);
     } else {
       try{
         const stream=await navigator.mediaDevices.getUserMedia({audio:true});
@@ -267,11 +354,39 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
         mr.onstop=()=>{
           stream.getTracks().forEach(t=>t.stop());
           const blob=new Blob(chunksRef.current,{type:"audio/webm"});
-          add(cid,{role:"user",text:"",type:"audio",audioSrc:URL.createObjectURL(blob)});
+          const audioSrc = URL.createObjectURL(blob);
+          add(cid,{role:"user",text:"[Röstmeddelande]",type:"audio",audioSrc});
+          // Trigger AI response to voice message
+          handleAudioSent(cid);
         };
         mr.start(); mrRef.current=mr; setRecording(true);
       }catch{ setErr("Mikrofonåtkomst nekad"); }
     }
+  }
+
+  async function handleAudioSent(cid: CID) {
+    setTyping(true);
+    try{
+      if(cid==="class"){
+        const raw=await gemini(key,[{role:"user",parts:[{text:
+          `Klasschatt. Användaren skickade ett röstmeddelande. Generera 1-2 korta reaktioner från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"haha lol","type":"text"}]`
+        }]}],undefined,200);
+        const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
+        for(const m of arr){
+          await new Promise(r=>setTimeout(r,500+Math.random()*800));
+          add("class",{role:"contact",sender:m.name,text:m.text||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
+        }
+      } else {
+        const history:GTurn[]=convos[cid].slice(-6).map(m=>({
+          role:m.role==="user"?"user":"model" as "user"|"model",
+          parts:[{text:m.type==="audio"?"[Användaren skickade ett röstmeddelande]":m.text}]
+        }));
+        history.push({role:"user",parts:[{text:"[Jag skickade ett röstmeddelande. Reagera kort.]"}]});
+        const reply=await gemini(key,history,PERSONA[cid],80);
+        add(cid,{role:"contact",text:reply.trim(),type:"text"});
+      }
+    }catch(e){setErr(e instanceof Error?e.message:"Fel");}
+    finally{setTyping(false);}
   }
 
   // ── Call ─────────────────────────────────────────────────────────────────────
@@ -284,7 +399,7 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     await new Promise(r=>setTimeout(r,2000));
     setView({screen:"call",cid,status:"connected",callerId:callerNames[cid]});
     try{
-      const greeting=await gemini(key,[{role:"user",text:"Hälsa kort, du svarade precis i telefon. 1 mycket kort mening."}],CALL_PERSONA[cid]||CALL_PERSONA.class,50);
+      const greeting=await gemini(key,[{role:"user",parts:[{text:"Hälsa kort, du svarade precis i telefon. 1 mycket kort mening."}]}],CALL_PERSONA[cid]||CALL_PERSONA.class,50);
       const g=greeting.trim();
       setCallLog(l=>[...l,{role:"contact",text:g,speaker:callerNames[cid]}]);
       speak(g);
@@ -298,19 +413,22 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
     setCallLog(l=>[...l,{role:"user",text}]);
     setCallTyping(true);
     try{
-      const history:GTurn[]=callLog.slice(-6).map(m=>({role:m.role==="user"?"user":"model" as "user"|"model",text:m.text}));
-      history.push({role:"user",text});
+      const history:GTurn[]=callLog.slice(-6).map(m=>({role:m.role==="user"?"user":"model" as "user"|"model",parts:[{text:m.text}]}));
+      history.push({role:"user",parts:[{text}]});
       const reply=await gemini(key,history,CALL_PERSONA[view.cid]||CALL_PERSONA.class,50);
       const r=reply.trim();
       setCallLog(l=>[...l,{role:"contact",text:r,speaker:view.callerId}]);
       speak(r);
     }catch{ /* ignore */ }
-    setCallTyping(false);
+    finally{setCallTyping(false);}
   }
 
   function hangUp(){
     window.speechSynthesis.cancel();
-    if(timerRef.current) clearInterval(timerRef.current);
+    if(timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     const cid=view.screen==="call"?view.cid:"johnny";
     setView({screen:"chat",cid});
   }
