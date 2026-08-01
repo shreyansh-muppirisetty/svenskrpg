@@ -86,24 +86,48 @@ function nameColor(n=""){
   let h=0; for(const c of n) h=((h<<5)-h+c.charCodeAt(0))|0;
   return p[Math.abs(h)%p.length];
 }
+// ── Web TTS ───────────────────────────────────────────────────────────────────
+
+// Use Google Translate TTS for proper Swedish pronunciation
 function speak(text:string, onEnd?:()=>void){
+  // Cancel any playing audio
+  const existing = document.getElementById("web-tts-audio") as HTMLAudioElement | null;
+  if(existing){ existing.pause(); existing.remove(); }
+  
+  // Build Google Translate TTS URL (max ~200 chars per request)
+  const chunkSize = 180;
+  const chunks: string[] = [];
+  for(let i=0;i<text.length;i+=chunkSize){
+    chunks.push(text.slice(i,i+chunkSize));
+  }
+  
+  let currentChunk = 0;
+  const audio = new Audio();
+  audio.id = "web-tts-audio";
+  
+  function playNext(){
+    if(currentChunk >= chunks.length){
+      if(onEnd) onEnd();
+      return;
+    }
+    const encoded = encodeURIComponent(chunks[currentChunk]);
+    audio.src = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=sv&client=tw-ob`;
+    audio.play().catch(()=>{
+      // Fallback to browser TTS if web TTS fails
+      fallbackSpeak(text, onEnd);
+    });
+    currentChunk++;
+  }
+  
+  audio.onended = playNext;
+  playNext();
+}
+
+// Fallback to browser native TTS if web TTS fails
+function fallbackSpeak(text:string, onEnd?:()=>void){
   window.speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);
-  u.lang="sv-SE"; u.rate=1.0;
-  
-  function setVoice(){
-    const voices=window.speechSynthesis.getVoices();
-    // Try to find a Swedish voice — be very specific
-    const sv=voices.find(v=>v.lang==="sv-SE") || voices.find(v=>v.lang.startsWith("sv"));
-    if(sv) u.voice=sv;
-  }
-  
-  // Voices may load async, so try immediately and also on voiceschanged
-  setVoice();
-  if(window.speechSynthesis.getVoices().length===0){
-    window.speechSynthesis.onvoiceschanged=setVoice;
-  }
-  
+  u.lang="sv-SE"; u.rate=0.9;
   if(onEnd) u.onend=onEnd;
   window.speechSynthesis.speak(u);
 }
