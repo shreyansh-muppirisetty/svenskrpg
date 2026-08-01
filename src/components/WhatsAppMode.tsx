@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { CallOverlay } from "./CallOverlay";
+
 
 // ── Gemini (same as rest of app) ──────────────────────────────────────────────
 
@@ -203,12 +205,15 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
 export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const key = loadKey();
   const [active, setActive] = useState<CID|null>(null);
+  const [calling, setCalling] = useState<CID|null>(null);
   const [convos, setConvos] = useState<Record<CID,Msg[]>>({johnny:[],jacob:[],sam:[],class:[]});
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [err, setErr] = useState("");
   const [unread, setUnread] = useState<Record<CID,number>>({johnny:2,jacob:1,sam:0,class:5});
   const bottomRef = useRef<HTMLDivElement>(null);
+  const callContact = CONTACTS.find(c=>c.id===calling);
+
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[convos,active,typing]);
 
@@ -279,10 +284,21 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
 
   const contact = CONTACTS.find(c=>c.id===active);
 
+  const overlay = calling && callContact ? (
+    <CallOverlay
+      contact={{name:callContact.name, initials:callContact.initials, color:callContact.color}}
+      persona={PERSONAS[calling]}
+      apiKey={key}
+      onEnd={()=>setCalling(null)}
+    />
+  ) : null;
+
   // ── List ────────────────────────────────────────────────────────────────────
 
   if (!active) return (
     <div className="flex flex-col gap-4">
+      {overlay}
+
       <div className="pixel-panel flex items-center justify-between rounded-sm bg-card p-4">
         <div>
           <p className="font-pixel text-[11px] text-primary">WHATSAPP</p>
@@ -299,24 +315,35 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
           const last = convos[c.id as CID].at(-1);
           const preview = last ? (last.type==="image"?"📷 Bild":last.type==="audio"?"🎤 Röstmeddelande":last.text) : null;
           return (
-            <button key={c.id} onClick={()=>key&&openChat(c.id as CID)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary/30 active:bg-secondary/50 transition-colors ${i<CONTACTS.length-1?"border-b-2 border-border":""} ${!key?"opacity-50 cursor-not-allowed":""}`}>
-              <div className="w-11 h-11 border-2 border-border flex items-center justify-center font-pixel text-[9px] text-white shrink-0"
-                style={{background:c.color}}>{c.initials}</div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="font-pixel text-[10px]">{c.name}</span>
-                  <span className="font-pixel text-[7px] text-muted-foreground">{ts()}</span>
+            <div key={c.id}
+              className={`w-full flex items-center gap-1 ${i<CONTACTS.length-1?"border-b-2 border-border":""} ${!key?"opacity-50":""}`}>
+              <button type="button" onClick={()=>key&&openChat(c.id as CID)}
+                className={`flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary/30 active:bg-secondary/50 transition-colors ${!key?"cursor-not-allowed":""}`}>
+                <div className="w-11 h-11 border-2 border-border flex items-center justify-center font-pixel text-[9px] text-white shrink-0"
+                  style={{background:c.color}}>{c.initials}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-pixel text-[10px]">{c.name}</span>
+                    <span className="font-pixel text-[7px] text-muted-foreground">{ts()}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm text-muted-foreground truncate">{preview ?? c.sub}</p>
+                    {unread[c.id as CID]>0 && (
+                      <span className="font-pixel text-[7px] text-white bg-primary w-4 h-4 flex items-center justify-center shrink-0">{unread[c.id as CID]}</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm text-muted-foreground truncate">{preview ?? c.sub}</p>
-                  {unread[c.id as CID]>0 && (
-                    <span className="font-pixel text-[7px] text-white bg-primary w-4 h-4 flex items-center justify-center shrink-0">{unread[c.id as CID]}</span>
-                  )}
-                </div>
-              </div>
-            </button>
+              </button>
+              {!(c as {isGroup?:boolean}).isGroup && (
+                <button type="button" aria-label={`Ring ${c.name}`} disabled={!key}
+                  onClick={()=>key&&setCalling(c.id as CID)}
+                  className="mr-3 h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+                  📞
+                </button>
+              )}
+            </div>
           );
+
         })}
       </div>
     </div>
@@ -328,6 +355,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
 
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
+      {overlay}
       <div className="pixel-panel flex items-center gap-3 rounded-sm bg-card p-3 mb-3 shrink-0">
         <button onClick={()=>setActive(null)} className="font-pixel text-[9px] text-muted-foreground mr-1">← BACK</button>
         <div className="w-9 h-9 border-2 border-border flex items-center justify-center font-pixel text-[8px] text-white shrink-0"
@@ -338,7 +366,15 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
             {typing ? "skriver..." : contact!.sub}
           </p>
         </div>
+        {!isGroup && (
+          <button type="button" aria-label={`Ring ${contact!.name}`} disabled={!key}
+            onClick={()=>setCalling(active)}
+            className="h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+            📞
+          </button>
+        )}
       </div>
+
 
       {err && <p className="font-pixel text-[8px] text-destructive mb-2 px-1">✗ {err}</p>}
 
