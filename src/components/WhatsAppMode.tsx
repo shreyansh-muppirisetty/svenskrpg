@@ -205,12 +205,15 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
 export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const key = loadKey();
   const [active, setActive] = useState<CID|null>(null);
+  const [calling, setCalling] = useState<CID|null>(null);
   const [convos, setConvos] = useState<Record<CID,Msg[]>>({johnny:[],jacob:[],sam:[],class:[]});
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [err, setErr] = useState("");
   const [unread, setUnread] = useState<Record<CID,number>>({johnny:2,jacob:1,sam:0,class:5});
   const bottomRef = useRef<HTMLDivElement>(null);
+  const callContact = CONTACTS.find(c=>c.id===calling);
+
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[convos,active,typing]);
 
