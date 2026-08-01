@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { CallOverlay } from "./CallOverlay";
+
 
 // ── Gemini (same as rest of app) ──────────────────────────────────────────────
 
