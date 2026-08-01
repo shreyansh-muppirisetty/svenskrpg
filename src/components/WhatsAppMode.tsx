@@ -18,7 +18,7 @@ async function gemini(key:string, turns:GTurn[], system?:string, max=200) {
   const r = await fetch(`${API}/${MODEL}:generateContent?key=${key}`,{
     method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),
   });
-  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  if(!r.ok){ const t=await r.text().catch(()=>""); throw new Error(`HTTP ${r.status}${t?`: ${t.slice(0,200)}`:""}`); }
   const d = await r.json();
   const t = d.candidates?.[0]?.content?.parts?.[0]?.text;
   if(!t) throw new Error("No response");
