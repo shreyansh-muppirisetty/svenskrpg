@@ -351,38 +351,51 @@ export function WhatsAppMode({onExit}:{onExit:()=>void}){
         const mr=new MediaRecorder(stream);
         chunksRef.current=[];
         mr.ondataavailable=e=>{if(e.data.size>0)chunksRef.current.push(e.data);};
-        mr.onstop=()=>{
+        mr.onstop=async()=>{
           stream.getTracks().forEach(t=>t.stop());
           const blob=new Blob(chunksRef.current,{type:"audio/webm"});
           const audioSrc = URL.createObjectURL(blob);
+          
+          // Convert blob to base64 for Gemini
+          const arrayBuffer = await blob.arrayBuffer();
+          const base64Audio = btoa(
+            new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+          );
+          
           add(cid,{role:"user",text:"[Röstmeddelande]",type:"audio",audioSrc});
-          // Trigger AI response to voice message
-          handleAudioSent(cid);
+          // Trigger AI response with the actual audio bytes
+          handleAudioSent(cid, base64Audio);
         };
         mr.start(); mrRef.current=mr; setRecording(true);
       }catch{ setErr("Mikrofonåtkomst nekad"); }
     }
   }
 
-  async function handleAudioSent(cid: CID) {
+  async function handleAudioSent(cid: CID, base64Audio: string) {
     setTyping(true);
     try{
       if(cid==="class"){
-        const raw=await gemini(key,[{role:"user",parts:[{text:
-          `Klasschatt. Användaren skickade ett röstmeddelande. Generera 1-2 korta reaktioner från klasskamrater. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"haha lol","type":"text"}]`
-        }]}],undefined,200);
+        // For class chat, send audio to Gemini to understand + get reactions
+        const raw=await gemini(key,[{role:"user",parts:[
+          {text:`Klasschatt. Användaren skickade ett röstmeddelande. Transkribera vad som sägs och generera 1-2 korta reaktioner från klasskamrater baserat på innehållet. Karaktärer: ${CLASS_CHARS}. Korta (3-10 ord). Svenska. BARA JSON: [{"name":"Ella","text":"haha lol","type":"text"}]`},
+          {inlineData:{mimeType:"audio/webm",data:base64Audio}}
+        ]}],undefined,300);
         const arr=parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string;voiceText?:string}>(raw);
         for(const m of arr){
           await new Promise(r=>setTimeout(r,500+Math.random()*800));
           add("class",{role:"contact",sender:m.name,text:m.text||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration,voiceText:m.voiceText});
         }
       } else {
+        // For 1-on-1, send audio to Gemini so the AI actually hears what was said
         const history:GTurn[]=convos[cid].slice(-6).map(m=>({
           role:m.role==="user"?"user":"model" as "user"|"model",
-          parts:[{text:m.type==="audio"?"[Användaren skickade ett röstmeddelande]":m.text}]
+          parts:[{text:m.type==="audio"?"[Röstmeddelande]":m.text}]
         }));
-        history.push({role:"user",parts:[{text:"[Jag skickade ett röstmeddelande. Reagera kort.]"}]});
-        const reply=await gemini(key,history,PERSONA[cid],80);
+        history.push({role:"user",parts:[
+          {text:"[Användaren skickade ett röstmeddelande. Lyssna och svara på det som sägs. Max 1-2 meningar.]"},
+          {inlineData:{mimeType:"audio/webm",data:base64Audio}}
+        ]});
+        const reply=await gemini(key,history,PERSONA[cid],120);
         add(cid,{role:"contact",text:reply.trim(),type:"text"});
       }
     }catch(e){setErr(e instanceof Error?e.message:"Fel");}
