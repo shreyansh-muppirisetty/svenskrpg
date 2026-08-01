@@ -284,10 +284,21 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
 
   const contact = CONTACTS.find(c=>c.id===active);
 
+  const overlay = calling && callContact ? (
+    <CallOverlay
+      contact={{name:callContact.name, initials:callContact.initials, color:callContact.color}}
+      persona={PERSONAS[calling]}
+      apiKey={key}
+      onEnd={()=>setCalling(null)}
+    />
+  ) : null;
+
   // ── List ────────────────────────────────────────────────────────────────────
 
   if (!active) return (
     <div className="flex flex-col gap-4">
+      {overlay}
+
       <div className="pixel-panel flex items-center justify-between rounded-sm bg-card p-4">
         <div>
           <p className="font-pixel text-[11px] text-primary">WHATSAPP</p>
