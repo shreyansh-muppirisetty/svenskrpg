@@ -316,14 +316,23 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
 
   const contact = CONTACTS.find(c=>c.id===active);
 
+  const callMemory = calling
+    ? convos[calling].slice(-14)
+        .map(m => `${m.role === "user" ? "Du" : (m.sender || callContact?.name || "")}: ${m.type === "image" ? `[bild: ${m.imageDesc || ""}]` : m.text}`)
+        .join("\n")
+    : "";
+
   const overlay = calling && callContact ? (
     <CallOverlay
       contact={{name:callContact.name, initials:callContact.initials, color:callContact.color}}
-      persona={PERSONAS[calling]}
+      persona={PERSONAS[calling] ?? ""}
       apiKey={key}
+      memory={callMemory}
+      group={calling === "class" ? { chars: CLASS_CHARS, names: CLASS_NAMES } : undefined}
       onEnd={()=>setCalling(null)}
     />
   ) : null;
+
 
   // ── List ────────────────────────────────────────────────────────────────────
 
@@ -366,13 +375,12 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
                   </div>
                 </div>
               </button>
-              {!(c as {isGroup?:boolean}).isGroup && (
-                <button type="button" aria-label={`Ring ${c.name}`} disabled={!key}
-                  onClick={()=>key&&setCalling(c.id as CID)}
-                  className="mr-3 h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
-                  📞
-                </button>
-              )}
+              <button type="button" aria-label={`Ring ${c.name}`} disabled={!key}
+                onClick={()=>key&&setCalling(c.id as CID)}
+                className="mr-3 h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+                {(c as {isGroup?:boolean}).isGroup ? "👥" : "📞"}
+              </button>
+
             </div>
           );
 
@@ -398,13 +406,12 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
             {typing ? "skriver..." : contact!.sub}
           </p>
         </div>
-        {!isGroup && (
-          <button type="button" aria-label={`Ring ${contact!.name}`} disabled={!key}
-            onClick={()=>setCalling(active)}
-            className="h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
-            📞
-          </button>
-        )}
+        <button type="button" aria-label={`Ring ${contact!.name}`} disabled={!key}
+          onClick={()=>setCalling(active)}
+          className="h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+          {isGroup ? "👥" : "📞"}
+        </button>
+
       </div>
 
 

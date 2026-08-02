@@ -7,14 +7,14 @@ const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 interface Turn { role: "user" | "model"; text: string }
 
-async function gemini(key: string, turns: Turn[], system: string): Promise<string> {
+async function gemini(key: string, turns: Turn[], system: string, maxTokens = 90): Promise<string> {
   const res = await fetch(`${API_BASE}/${MODEL}:generateContent?key=${key}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
       system_instruction: { parts: [{ text: system }] },
-      generationConfig: { temperature: 0.9, maxOutputTokens: 90 },
+      generationConfig: { temperature: 0.9, maxOutputTokens: maxTokens },
     }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -22,6 +22,12 @@ async function gemini(key: string, turns: Turn[], system: string): Promise<strin
   const text = d.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Inget svar");
   return String(text).trim();
+}
+
+function parseArr<T>(raw: string): T[] {
+  const s = raw.indexOf("["), e = raw.lastIndexOf("]");
+  if (s === -1) return [];
+  try { return JSON.parse(raw.slice(s, e + 1)); } catch { return []; }
 }
 
 // ── Speech recognition typing ────────────────────────────────────────────────
@@ -51,19 +57,56 @@ function pickSwedishVoice(): SpeechSynthesisVoice | null {
   } catch { return null; }
 }
 
+const TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "sage", "coral"];
+function voiceFor(name: string) {
+  let h = 0;
+  for (const c of name) h = ((h << 5) - h + c.charCodeAt(0)) | 0;
+  return TTS_VOICES[Math.abs(h) % TTS_VOICES.length];
+}
+
 type Phase = "ringing" | "listening" | "thinking" | "speaking" | "ended";
 
 export interface CallContact { name: string; initials: string; color: string }
 
+export interface GroupCall {
+  /** Character sheet for everyone in the class. */
+  chars: string;
+  /** Everyone who could possibly be on the call. */
+  names: string[];
+}
+
+interface Line { name: string; text: string }
+
 export function CallOverlay({
-  contact, persona, apiKey, onEnd,
-}: { contact: CallContact; persona: string; apiKey: string; onEnd: () => void }) {
+  contact, persona, apiKey, onEnd, memory, group,
+}: {
+  contact: CallContact;
+  persona: string;
+  apiKey: string;
+  onEnd: () => void;
+  /** Recent chat history so they remember what was said in the chat. */
+  memory?: string;
+  /** When set, this is a group call. */
+  group?: GroupCall;
+}) {
   const [phase, setPhase] = useState<Phase>("ringing");
   const [heard, setHeard] = useState("");
-  const [said, setSaid] = useState("");
+  const [lines, setLines] = useState<Line[]>([]);
   const [err, setErr] = useState("");
   const [secs, setSecs] = useState(0);
   const [muted, setMuted] = useState(false);
+
+  // Random 2–22 classmates actually pick up the group call.
+  const [joined] = useState<string[]>(() => {
+    if (!group) return [];
+    const pool = [...group.names];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const n = Math.min(pool.length, 2 + Math.floor(Math.random() * Math.max(1, Math.min(21, pool.length - 1))));
+    return pool.slice(0, n);
+  });
 
   const historyRef = useRef<Turn[]>([]);
   const recRef = useRef<SRType | null>(null);
@@ -72,15 +115,25 @@ export function CallOverlay({
   const mutedRef = useRef(false);
   const supported = !!getSR();
 
+  const memoryBlock = memory && memory.trim()
+    ? `\n\nHere is what was recently said in the WhatsApp chat with the user — you remember all of it and can refer to it naturally:\n${memory.trim()}`
+    : "";
+
+  const systemBase = group
+    ? `This is a Swedish class group PHONE CALL (Klass 8B, 15-year-olds). On the call right now: ${joined.join(", ")}. Characters: ${group.chars}. Everyone speaks natural spoken Swedish, 1 short sentence each, no emoji, no asterisks, no formatting. People talk over each other, joke and react to each other, and Viggo (if present) is always mean and mocking toward the user.${memoryBlock}`
+    : `${persona}\nYou are on a PHONE CALL — speak naturally, 1-2 short spoken Swedish sentences. No emoji, no asterisks, no formatting.${memoryBlock}`;
+  const systemRef = useRef(systemBase);
+  systemRef.current = systemBase;
+
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
-  const speak = useCallback(async (text: string) => {
+  const speak = useCallback(async (text: string, speaker?: string) => {
     // Prefer cloud Swedish voice; fall back to a system sv-SE voice.
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice: speaker ? voiceFor(speaker) : undefined }),
       });
       if (!res.ok) throw new Error(String(res.status));
       const blob = await res.blob();
@@ -141,24 +194,46 @@ export function CallOverlay({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const playLines = useCallback(async (arr: Line[]) => {
+    setPhase("speaking");
+    for (const l of arr) {
+      if (!aliveRef.current) return;
+      setLines((prev) => [...prev.slice(-5), l]);
+      await speak(l.text, group ? l.name : undefined);
+    }
+  }, [speak, group]);
+
   const respond = useCallback(async (text: string) => {
     if (!aliveRef.current) return;
     setPhase("thinking");
     historyRef.current = [...historyRef.current.slice(-10), { role: "user", text }];
     try {
-      const reply = await gemini(apiKey, historyRef.current, `${persona}\nYou are on a PHONE CALL — speak naturally, 1-2 short spoken Swedish sentences. No emoji, no asterisks, no formatting.`);
-      if (!aliveRef.current) return;
-      historyRef.current = [...historyRef.current, { role: "model", text: reply }];
-      setSaid(reply);
-      setPhase("speaking");
-      await speak(reply);
+      if (group) {
+        // A random handful of the people on the call actually answer each turn.
+        const speakers = [...joined].sort(() => Math.random() - 0.5).slice(0, 1 + Math.floor(Math.random() * Math.min(3, joined.length)));
+        const raw = await gemini(
+          apiKey,
+          historyRef.current,
+          `${systemRef.current}\nThe user just said something on the call. Reply with ONLY a JSON array of 1-${speakers.length} spoken lines from these people, in this order: ${speakers.join(", ")}. Format: [{"name":"Maja","text":"vad sa du typ"}]`,
+          220,
+        );
+        const arr = parseArr<Line>(raw).filter((l) => l && l.text);
+        const out = arr.length ? arr : [{ name: speakers[0], text: "Hallå? Jag hörde inte." }];
+        historyRef.current = [...historyRef.current, { role: "model", text: out.map((l) => `${l.name}: ${l.text}`).join("\n") }];
+        await playLines(out);
+      } else {
+        const reply = await gemini(apiKey, historyRef.current, systemRef.current);
+        if (!aliveRef.current) return;
+        historyRef.current = [...historyRef.current, { role: "model", text: reply }];
+        await playLines([{ name: contact.name, text: reply }]);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Fel");
     }
     if (!aliveRef.current) return;
     if (mutedRef.current) { setPhase("listening"); return; }
     listen();
-  }, [apiKey, persona, speak, listen]);
+  }, [apiKey, group, joined, contact.name, playLines, listen]);
 
   // Ring, then answer and greet.
   useEffect(() => {
@@ -167,12 +242,24 @@ export function CallOverlay({
       if (!aliveRef.current) return;
       setPhase("thinking");
       try {
-        const greet = await gemini(apiKey, [{ role: "user", text: "Du svarar precis i telefonen. Säg en kort naturlig hälsning på svenska, en mening." }], persona);
-        if (!aliveRef.current) return;
-        historyRef.current = [{ role: "model", text: greet }];
-        setSaid(greet);
-        setPhase("speaking");
-        await speak(greet);
+        if (group) {
+          const greeters = joined.slice(0, Math.min(3, joined.length));
+          const raw = await gemini(
+            apiKey,
+            [{ role: "user", text: `Alla svarar precis i gruppsamtalet. Ge korta naturliga hälsningar/inledningar på svenska från: ${greeters.join(", ")}. En mening var. Bara JSON-array: [{"name":"Maja","text":"halloj!"}]` }],
+            systemRef.current,
+            200,
+          );
+          const arr = parseArr<Line>(raw).filter((l) => l && l.text);
+          const out = arr.length ? arr : greeters.map((n) => ({ name: n, text: "Hallå!" }));
+          historyRef.current = [{ role: "model", text: out.map((l) => `${l.name}: ${l.text}`).join("\n") }];
+          await playLines(out);
+        } else {
+          const greet = await gemini(apiKey, [{ role: "user", text: "Du svarar precis i telefonen. Säg en kort naturlig hälsning på svenska, en mening." }], systemRef.current);
+          if (!aliveRef.current) return;
+          historyRef.current = [{ role: "model", text: greet }];
+          await playLines([{ name: contact.name, text: greet }]);
+        }
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Fel");
       }
@@ -219,17 +306,22 @@ export function CallOverlay({
           style={{ background: contact.color }}>{contact.initials}</div>
         <p className="font-pixel text-[14px]">{contact.name}</p>
         <p className="font-pixel text-[9px] text-muted-foreground">{phase === "ringing" ? status : `${mmss} · ${status}`}</p>
+        {group && phase !== "ringing" && (
+          <p className="max-w-xs text-center font-pixel text-[7px] text-muted-foreground">
+            {joined.length} med i samtalet: {joined.join(", ")}
+          </p>
+        )}
         {!supported && <p className="max-w-xs text-center font-pixel text-[8px] text-destructive">Din webbläsare stödjer inte röstigenkänning (prova Chrome).</p>}
         {err && <p className="max-w-xs text-center font-pixel text-[8px] text-destructive">✗ {err}</p>}
       </div>
 
       <div className="w-full max-w-sm space-y-2">
-        {said && (
-          <div className="border-2 border-border bg-card p-3">
-            <p className="font-pixel text-[7px] text-muted-foreground">{contact.name}</p>
-            <p className="text-sm leading-snug">{said}</p>
+        {lines.slice(-3).map((l, i) => (
+          <div key={`${l.name}-${i}-${l.text.slice(0, 8)}`} className="border-2 border-border bg-card p-3">
+            <p className="font-pixel text-[7px] text-muted-foreground">{l.name}</p>
+            <p className="text-sm leading-snug">{l.text}</p>
           </div>
-        )}
+        ))}
         {heard && (
           <div className="border-2 border-border bg-accent p-3">
             <p className="font-pixel text-[7px] text-muted-foreground">Du</p>
