@@ -190,8 +190,8 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
               <span className="font-pixel text-[7px] text-muted-foreground">{msg.duration||"0:08"}</span>
             </div>
           )}
-          {msg.type==="text" && <p className="text-sm leading-snug">{msg.text}</p>}
-          {msg.type==="image" && msg.text && <p className="text-sm px-1 pt-1">{msg.text}</p>}
+          {msg.type==="text" && <p className="text-sm leading-snug"><RichText text={msg.text}/></p>}
+          {msg.type==="image" && msg.text && <p className="text-sm px-1 pt-1"><RichText text={msg.text}/></p>}
           <div className="flex items-center justify-end gap-1 mt-0.5">
             <span className="font-pixel text-[7px] text-muted-foreground">{msg.time}</span>
             {sent && <span className="font-pixel text-[7px] text-primary">✓✓</span>}
