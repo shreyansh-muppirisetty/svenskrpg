@@ -100,6 +100,19 @@ function pickSwedishVoice(): SpeechSynthesisVoice | null {
     return null;
   }
 }
+function RichText({ text }: { text: string }) {
+  const parts = text.split(/(@[\p{L}]+)/u);
+  return (
+    <>
+      {parts.map((p, i) =>
+        /^@[\p{L}]+$/u.test(p) && CLASS_NAMES.some(n => n.toLowerCase() === p.slice(1).toLowerCase())
+          ? <span key={i} className="font-semibold text-primary">{p}</span>
+          : <span key={i}>{p}</span>
+      )}
+    </>
+  );
+}
+
 
 function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
   const sent = msg.role === "user";
