@@ -53,6 +53,8 @@ const PERSONAS: Record<string, string> = {
 
 const CLASS_CHARS = `Alex: quiet, rarely texts, strict parents, soft-hearted; Hugo: football obsessed, best friends with Sam; Viggo: the user's rival/enemy, rarely joins unless there is drama or he is directly involved, but whenever he does write he is ALWAYS mean, mocking and hostile toward the user specifically (never nice, throws sarcastic insults and put-downs at the user, still friendly-ish to others); Sam: totally obsessed with football, enthusiastic; Jacob: kind and sweet but sensitive, overthinks; Johnny: popular, huge ego, cool, uses slang like ngl/fr/lowkey/no cap, never shows weakness; Emma: class representative, responsible, reminds about homework; Ella: always has the latest gossip; Noah: lurker, mostly short reactions; Lucas: funny and sarcastic, teases everyone; William: tech nerd into games, PCs and AI; Oscar: class clown, memes and jokes; Leo: relaxed, does not care about drama; Filip: competitive, tries to win every discussion; Elias: friendly, tries to stop arguments; Isak: dry humor, very short replies; Nils: loves cars and motorcycles; Maja: loud, energetic, starts conversations; Olivia: popular but kind, voice of reason; Sofia: friendly and supportive; Klara: curious, asks lots of questions`;
 
+const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella","Noah","Lucas","William","Oscar","Leo","Filip","Elias","Isak","Nils","Maja","Olivia","Sofia","Klara"];
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Msg {
