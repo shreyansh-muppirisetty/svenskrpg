@@ -53,6 +53,8 @@ const PERSONAS: Record<string, string> = {
 
 const CLASS_CHARS = `Alex: quiet, rarely texts, strict parents, soft-hearted; Hugo: football obsessed, best friends with Sam; Viggo: the user's rival/enemy, rarely joins unless there is drama or he is directly involved, but whenever he does write he is ALWAYS mean, mocking and hostile toward the user specifically (never nice, throws sarcastic insults and put-downs at the user, still friendly-ish to others); Sam: totally obsessed with football, enthusiastic; Jacob: kind and sweet but sensitive, overthinks; Johnny: popular, huge ego, cool, uses slang like ngl/fr/lowkey/no cap, never shows weakness; Emma: class representative, responsible, reminds about homework; Ella: always has the latest gossip; Noah: lurker, mostly short reactions; Lucas: funny and sarcastic, teases everyone; William: tech nerd into games, PCs and AI; Oscar: class clown, memes and jokes; Leo: relaxed, does not care about drama; Filip: competitive, tries to win every discussion; Elias: friendly, tries to stop arguments; Isak: dry humor, very short replies; Nils: loves cars and motorcycles; Maja: loud, energetic, starts conversations; Olivia: popular but kind, voice of reason; Sofia: friendly and supportive; Klara: curious, asks lots of questions`;
 
+const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella","Noah","Lucas","William","Oscar","Leo","Filip","Elias","Isak","Nils","Maja","Olivia","Sofia","Klara"];
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Msg {
@@ -98,6 +100,19 @@ function pickSwedishVoice(): SpeechSynthesisVoice | null {
     return null;
   }
 }
+function RichText({ text }: { text: string }) {
+  const parts = text.split(/(@[\p{L}]+)/u);
+  return (
+    <>
+      {parts.map((p, i) =>
+        /^@[\p{L}]+$/u.test(p) && CLASS_NAMES.some(n => n.toLowerCase() === p.slice(1).toLowerCase())
+          ? <span key={i} className="font-semibold text-primary">{p}</span>
+          : <span key={i}>{p}</span>
+      )}
+    </>
+  );
+}
+
 
 function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
   const sent = msg.role === "user";
@@ -188,8 +203,8 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
               <span className="font-pixel text-[7px] text-muted-foreground">{msg.duration||"0:08"}</span>
             </div>
           )}
-          {msg.type==="text" && <p className="text-sm leading-snug">{msg.text}</p>}
-          {msg.type==="image" && msg.text && <p className="text-sm px-1 pt-1">{msg.text}</p>}
+          {msg.type==="text" && <p className="text-sm leading-snug"><RichText text={msg.text}/></p>}
+          {msg.type==="image" && msg.text && <p className="text-sm px-1 pt-1"><RichText text={msg.text}/></p>}
           <div className="flex items-center justify-end gap-1 mt-0.5">
             <span className="font-pixel text-[7px] text-muted-foreground">{msg.time}</span>
             {sent && <span className="font-pixel text-[7px] text-primary">✓✓</span>}
@@ -213,6 +228,19 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const [unread, setUnread] = useState<Record<CID,number>>({johnny:2,jacob:1,sam:0,class:5});
   const bottomRef = useRef<HTMLDivElement>(null);
   const callContact = CONTACTS.find(c=>c.id===calling);
+
+  const mentionQuery = useMemo(()=>{
+    const m = /@([\p{L}]*)$/u.exec(input);
+    return m ? m[1] : null;
+  },[input]);
+  const mentionOpts = useMemo(()=>{
+    if (mentionQuery === null) return [] as string[];
+    return CLASS_NAMES.filter(n=>n.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0,6);
+  },[mentionQuery]);
+  function applyMention(name: string) {
+    setInput(v=>v.replace(/@[\p{L}]*$/u, `@${name} `));
+  }
+
 
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[convos,active,typing]);
@@ -260,9 +288,13 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     try {
       if (active === "class") {
         const recent = convos.class.slice(-5).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
+        const mentioned = CLASS_NAMES.filter(n=>new RegExp(`@${n}\\b`,"i").test(text));
+        const mentionRule = mentioned.length
+          ? ` The user directly called out ${mentioned.join(", ")} with @mentions — those people MUST reply first, in that order, each staying fully in character (Viggo replies mean and mocking toward the user).`
+          : "";
         const raw = await gemini(key, [{
           role: "user",
-          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}. Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
         for (const m of arr) {
@@ -394,15 +426,25 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         <div ref={bottomRef}/>
       </div>
 
-      <div className="flex gap-2 shrink-0">
-        <input value={input} onChange={e=>setInput(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
-          placeholder="Skriv ett meddelande…" spellCheck={false}
-          className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2 text-sm outline-none focus:border-ring"/>
-        <button onClick={send} disabled={!input.trim()||typing}
-          className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
-          SKICKA
-        </button>
+      <div className="shrink-0">
+        {isGroup && mentionOpts.length>0 && (
+          <div className="mb-2 flex flex-wrap gap-1 border-2 border-border bg-card p-2">
+            {mentionOpts.map(n=>(
+              <button key={n} type="button" onClick={()=>applyMention(n)}
+                className="border-2 border-border bg-secondary/40 px-2 py-1 font-pixel text-[8px] active:translate-y-0.5">@{n}</button>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input value={input} onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ if(mentionOpts.length>0){ e.preventDefault(); applyMention(mentionOpts[0]); } else send(); } }}
+            placeholder={isGroup?"Skriv… (@namn för att kalla ut någon)":"Skriv ett meddelande…"} spellCheck={false}
+            className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2 text-sm outline-none focus:border-ring"/>
+          <button onClick={send} disabled={!input.trim()||typing}
+            className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+            SKICKA
+          </button>
+        </div>
       </div>
     </div>
   );
