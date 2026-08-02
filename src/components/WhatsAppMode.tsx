@@ -406,13 +406,12 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
             {typing ? "skriver..." : contact!.sub}
           </p>
         </div>
-        {!isGroup && (
-          <button type="button" aria-label={`Ring ${contact!.name}`} disabled={!key}
-            onClick={()=>setCalling(active)}
-            className="h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
-            📞
-          </button>
-        )}
+        <button type="button" aria-label={`Ring ${contact!.name}`} disabled={!key}
+          onClick={()=>setCalling(active)}
+          className="h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+          {isGroup ? "👥" : "📞"}
+        </button>
+
       </div>
 
 
