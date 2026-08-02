@@ -394,15 +394,25 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         <div ref={bottomRef}/>
       </div>
 
-      <div className="flex gap-2 shrink-0">
-        <input value={input} onChange={e=>setInput(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
-          placeholder="Skriv ett meddelande…" spellCheck={false}
-          className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2 text-sm outline-none focus:border-ring"/>
-        <button onClick={send} disabled={!input.trim()||typing}
-          className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
-          SKICKA
-        </button>
+      <div className="shrink-0">
+        {isGroup && mentionOpts.length>0 && (
+          <div className="mb-2 flex flex-wrap gap-1 border-2 border-border bg-card p-2">
+            {mentionOpts.map(n=>(
+              <button key={n} type="button" onClick={()=>applyMention(n)}
+                className="border-2 border-border bg-secondary/40 px-2 py-1 font-pixel text-[8px] active:translate-y-0.5">@{n}</button>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input value={input} onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ if(mentionOpts.length>0){ e.preventDefault(); applyMention(mentionOpts[0]); } else send(); } }}
+            placeholder={isGroup?"Skriv… (@namn för att kalla ut någon)":"Skriv ett meddelande…"} spellCheck={false}
+            className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2 text-sm outline-none focus:border-ring"/>
+          <button onClick={send} disabled={!input.trim()||typing}
+            className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+            SKICKA
+          </button>
+        </div>
       </div>
     </div>
   );
