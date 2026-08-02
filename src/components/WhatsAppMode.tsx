@@ -316,14 +316,23 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
 
   const contact = CONTACTS.find(c=>c.id===active);
 
+  const callMemory = calling
+    ? convos[calling].slice(-14)
+        .map(m => `${m.role === "user" ? "Du" : (m.sender || callContact?.name || "")}: ${m.type === "image" ? `[bild: ${m.imageDesc || ""}]` : m.text}`)
+        .join("\n")
+    : "";
+
   const overlay = calling && callContact ? (
     <CallOverlay
       contact={{name:callContact.name, initials:callContact.initials, color:callContact.color}}
-      persona={PERSONAS[calling]}
+      persona={PERSONAS[calling] ?? ""}
       apiKey={key}
+      memory={callMemory}
+      group={calling === "class" ? { chars: CLASS_CHARS, names: CLASS_NAMES } : undefined}
       onEnd={()=>setCalling(null)}
     />
   ) : null;
+
 
   // ── List ────────────────────────────────────────────────────────────────────
 
