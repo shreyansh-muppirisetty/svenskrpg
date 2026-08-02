@@ -262,9 +262,13 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     try {
       if (active === "class") {
         const recent = convos.class.slice(-5).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
+        const mentioned = CLASS_NAMES.filter(n=>new RegExp(`@${n}\\b`,"i").test(text));
+        const mentionRule = mentioned.length
+          ? ` The user directly called out ${mentioned.join(", ")} with @mentions — those people MUST reply first, in that order, each staying fully in character (Viggo replies mean and mocking toward the user).`
+          : "";
         const raw = await gemini(key, [{
           role: "user",
-          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}. Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
         for (const m of arr) {
