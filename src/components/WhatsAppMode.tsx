@@ -216,6 +216,19 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const callContact = CONTACTS.find(c=>c.id===calling);
 
+  const mentionQuery = useMemo(()=>{
+    const m = /@([\p{L}]*)$/u.exec(input);
+    return m ? m[1] : null;
+  },[input]);
+  const mentionOpts = useMemo(()=>{
+    if (mentionQuery === null) return [] as string[];
+    return CLASS_NAMES.filter(n=>n.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0,6);
+  },[mentionQuery]);
+  function applyMention(name: string) {
+    setInput(v=>v.replace(/@[\p{L}]*$/u, `@${name} `));
+  }
+
+
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[convos,active,typing]);
 
