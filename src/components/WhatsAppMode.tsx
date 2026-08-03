@@ -63,6 +63,42 @@ const CLASS_CHARS = `Alex: quiet, rarely texts, strict parents, soft-hearted; Hu
 
 const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella","Noah","Lucas","William","Oscar","Leo","Filip","Elias","Isak","Nils","Maja","Olivia","Sofia","Klara"];
 
+// ── Presence / offline simulation helpers ────────────────────────────────────
+
+const STORE = "svenska-quest-whatsapp-state";
+/** Max messages that can pile up while the player is away. */
+const MAX_OFFLINE_GROUP = 23;
+const MAX_OFFLINE_SOLO = 3;
+
+const rnd = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  return a;
+}
+const pickN = <T,>(arr: T[], n: number) => shuffle(arr).slice(0, Math.max(0, n));
+
+/** Random number of repliers — sometimes nobody answers at all. */
+function replyCount(): number {
+  const r = Math.random();
+  if (r < 0.22) return 0;
+  if (r < 0.62) return 1;
+  if (r < 0.87) return 2;
+  return 3;
+}
+
+/** Who drifts in and out of the chat over time. */
+function driftPresence(current: string[]): string[] {
+  let next = [...current];
+  if (next.length > 3 && Math.random() < 0.5) next = next.filter(n => n !== next[rnd(0, next.length-1)]);
+  if (next.length > 4 && Math.random() < 0.3) next = next.filter(n => n !== next[rnd(0, next.length-1)]);
+  const away = CLASS_NAMES.filter(n => !next.includes(n));
+  const joins = pickN(away, Math.random() < 0.55 ? rnd(1,2) : 0);
+  next = [...next, ...joins];
+  if (next.length < 3) next = [...next, ...pickN(away.filter(n=>!next.includes(n)), 3 - next.length)];
+  return next.slice(0, 12);
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Msg {
@@ -249,7 +285,18 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const key = loadKey();
   const [active, setActive] = useState<CID|null>(null);
   const [calling, setCalling] = useState<CID|null>(null);
-  const [convos, setConvos] = useState<Record<CID,Msg[]>>({johnny:[],jacob:[],sam:[],class:[]});
+  const saved = useRef<{convos?:Record<CID,Msg[]>; presence?:string[]; left?:number} | null>(null);
+  if (saved.current === null) {
+    try { saved.current = JSON.parse(localStorage.getItem(STORE) || "null") ?? {}; } catch { saved.current = {}; }
+    const all = Object.values(saved.current?.convos ?? {}).flat() as Msg[];
+    _id = all.reduce((m, x) => Math.max(m, x.id || 0), 0);
+  }
+  const [convos, setConvos] = useState<Record<CID,Msg[]>>(
+    saved.current?.convos ?? {johnny:[],jacob:[],sam:[],class:[]}
+  );
+  const [presence, setPresence] = useState<string[]>(
+    saved.current?.presence?.length ? saved.current.presence : pickN(CLASS_NAMES, rnd(4,7))
+  );
   const [input, setInput] = useState("");
   const [att, setAtt] = useState<{dataUrl:string; mime:string; name:string; kind:"image"|"audio"|"file"}|null>(null);
   const [recording, setRecording] = useState(false);
@@ -284,8 +331,95 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   function clearAll() {
     setConvos({johnny:[],jacob:[],sam:[],class:[]});
     setUnread({johnny:0,jacob:0,sam:0,class:0});
+    setPresence(pickN(CLASS_NAMES, rnd(4,7)));
+    try { localStorage.removeItem(STORE); } catch { /* ignore */ }
     setActive(null);
   }
+
+  // ── Living chat: presence drift, background chatter and offline catch-up ────
+
+  const stateRef = useRef({ convos, presence, active, calling, typing });
+  stateRef.current = { convos, presence, active, calling, typing };
+  const busyRef = useRef(false);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORE, JSON.stringify({ convos, presence, left: Date.now() })); } catch { /* ignore */ }
+  }, [convos, presence]);
+
+  function pushGroup(arr: {name:string;text:string;type?:string;imageDesc?:string;duration?:string}[]) {
+    if (!arr.length) return;
+    setConvos(c => ({
+      ...c,
+      class: [...c.class, ...arr.map(m => ({
+        id: nid(), time: ts(), role: "contact" as const, sender: m.name,
+        text: m.text || m.imageDesc || "", type: (m.type as Msg["type"]) || "text",
+        imageDesc: m.imageDesc, duration: m.duration,
+      }))],
+    }));
+    if (stateRef.current.active !== "class") setUnread(u => ({ ...u, class: u.class + arr.length }));
+  }
+
+  async function groupChatter(count: number, note: string) {
+    if (!key || count <= 0 || busyRef.current) return;
+    busyRef.current = true;
+    try {
+      const online = stateRef.current.presence;
+      const recent = stateRef.current.convos.class.slice(-8).map(m => `${m.sender || "Du"}: ${m.text}`).join("\n");
+      const raw = await gemini(key, [{
+        role: "user",
+        text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
+      }], undefined, 120 + count * 45);
+      pushGroup(parseArr<{name:string;text:string;type?:string;imageDesc?:string;duration?:string}>(raw).slice(0, count));
+    } catch { /* silent background failure */ }
+    busyRef.current = false;
+  }
+
+  async function soloChatter(cid: CID, count: number) {
+    if (!key || count <= 0 || cid === "class") return;
+    try {
+      const history = stateRef.current.convos[cid].slice(-8).map(m => `${m.role === "user" ? "Du" : CONTACTS.find(c=>c.id===cid)?.name}: ${m.text}`).join("\n");
+      const raw = await gemini(key, [{
+        role: "user",
+        text: `Recent chat:\n${history || "(tom chatt)"}\nWrite exactly ${count} short new messages you send on your own while the player is away (double-texting). Swedish, very short. Return ONLY a JSON array of strings: ["hallå?","svara typ"]`,
+      }], PERSONAS[cid], 100);
+      const arr = parseArr<string>(raw).slice(0, count).filter(t => typeof t === "string" && t.trim());
+      if (!arr.length) return;
+      setConvos(c => ({ ...c, [cid]: [...c[cid], ...arr.map(t => ({ id: nid(), time: ts(), role: "contact" as const, text: t.trim(), type: "text" as const }))] }));
+      if (stateRef.current.active !== cid) setUnread(u => ({ ...u, [cid]: u[cid] + arr.length }));
+    } catch { /* silent */ }
+  }
+
+  // Catch up on everything that happened while the player was in another mode.
+  useEffect(() => {
+    const left = saved.current?.left;
+    if (!key || !left) return;
+    const mins = (Date.now() - left) / 60000;
+    if (mins < 1) return;
+    setPresence(p => driftPresence(p));
+    const n = Math.min(MAX_OFFLINE_GROUP, Math.max(1, Math.round(mins / 2)));
+    void groupChatter(n, `The player has been offline for about ${Math.round(mins)} minutes — this is everything they missed.`);
+    for (const cid of pickN(["johnny","jacob","sam"] as CID[], Math.random() < 0.5 ? rnd(1,2) : 0)) {
+      void soloChatter(cid, rnd(1, MAX_OFFLINE_SOLO));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // While the app is open the class keeps chatting on its own.
+  useEffect(() => {
+    if (!key) return;
+    const i = setInterval(() => {
+      if (stateRef.current.calling || stateRef.current.typing || busyRef.current) return;
+      setPresence(p => (Math.random() < 0.5 ? driftPresence(p) : p));
+      if (stateRef.current.convos.class.length && Math.random() < 0.55) {
+        void groupChatter(rnd(1, 3), "Continue the conversation naturally right now.");
+      } else if (Math.random() < 0.15) {
+        void soloChatter(pickN(["johnny","jacob","sam"] as CID[], 1)[0], 1);
+      }
+    }, 45000);
+    return () => clearInterval(i);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
 
   async function openChat(id: CID) {
     setActive(id); setErr("");
@@ -373,17 +507,24 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       : "";
     try {
       if (active === "class") {
-        const recent = convos.class.slice(-5).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
+        const recent = convos.class.slice(-8).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
         const mentioned = CLASS_NAMES.filter(n=>new RegExp(`@${n}\\b`,"i").test(text));
+        // People who were actually talking with you, from those currently online.
+        const talkers = [...new Set(convos.class.slice(-12).map(m=>m.sender).filter((n): n is string => !!n))];
+        const online = [...new Set([...presence, ...mentioned])];
+        const pool = [...new Set([...mentioned, ...talkers.filter(n=>online.includes(n)), ...online])];
+        const n = mentioned.length ? Math.min(pool.length, mentioned.length + (Math.random()<0.4?1:0)) : Math.min(pool.length, replyCount());
+        if (n === 0) { setTyping(false); return; }
+        const speakers = [...mentioned, ...pool.filter(p=>!mentioned.includes(p)).slice(0, Math.max(0, n - mentioned.length))].slice(0, n);
         const mentionRule = mentioned.length
-          ? ` The user directly called out ${mentioned.join(", ")} with @mentions — those people MUST reply first, in that order, each staying fully in character (Viggo replies mean and mocking toward the user).`
+          ? ` The user directly called out ${mentioned.join(", ")} with @mentions — those people reply first, in that order, each staying fully in character (Viggo replies mean and mocking toward the user).`
           : "";
         const raw = await gemini(key, [{
           role: "user",
           files,
-          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"${attNote}\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          text: `Swedish class WhatsApp group. Online right now: ${online.join(", ")}. Recent messages:\n${recent}\nUser just sent: "${text}"${attNote}\nGenerate exactly ${n} short replies, only from these people and in this order: ${speakers.join(", ")}. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
-        const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
+        const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw).slice(0, n);
         for (const m of arr) {
           await new Promise(r=>setTimeout(r,400+Math.random()*900));
           add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration});
