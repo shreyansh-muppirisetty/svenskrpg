@@ -57,12 +57,8 @@ function pickSwedishVoice(): SpeechSynthesisVoice | null {
   } catch { return null; }
 }
 
-const TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "sage", "coral"];
-function voiceFor(name: string) {
-  let h = 0;
-  for (const c of name) h = ((h << 5) - h + c.charCodeAt(0)) | 0;
-  return TTS_VOICES[Math.abs(h) % TTS_VOICES.length];
-}
+import { voiceFor } from "@/lib/voices";
+
 
 type Phase = "ringing" | "listening" | "thinking" | "speaking" | "ended";
 
