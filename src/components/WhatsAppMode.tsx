@@ -367,7 +367,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         role: "user",
         text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
       }], undefined, 120 + count * 45);
-      pushGroup(parseArr(raw).slice(0, count));
+      pushGroup(parseArr<{name:string;text:string;type?:string;imageDesc?:string;duration?:string}>(raw).slice(0, count));
     } catch { /* silent background failure */ }
     busyRef.current = false;
   }
