@@ -63,6 +63,42 @@ const CLASS_CHARS = `Alex: quiet, rarely texts, strict parents, soft-hearted; Hu
 
 const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella","Noah","Lucas","William","Oscar","Leo","Filip","Elias","Isak","Nils","Maja","Olivia","Sofia","Klara"];
 
+// ── Presence / offline simulation helpers ────────────────────────────────────
+
+const STORE = "svenska-quest-whatsapp-state";
+/** Max messages that can pile up while the player is away. */
+const MAX_OFFLINE_GROUP = 23;
+const MAX_OFFLINE_SOLO = 3;
+
+const rnd = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  return a;
+}
+const pickN = <T,>(arr: T[], n: number) => shuffle(arr).slice(0, Math.max(0, n));
+
+/** Random number of repliers — sometimes nobody answers at all. */
+function replyCount(): number {
+  const r = Math.random();
+  if (r < 0.22) return 0;
+  if (r < 0.62) return 1;
+  if (r < 0.87) return 2;
+  return 3;
+}
+
+/** Who drifts in and out of the chat over time. */
+function driftPresence(current: string[]): string[] {
+  let next = [...current];
+  if (next.length > 3 && Math.random() < 0.5) next = next.filter(n => n !== next[rnd(0, next.length-1)]);
+  if (next.length > 4 && Math.random() < 0.3) next = next.filter(n => n !== next[rnd(0, next.length-1)]);
+  const away = CLASS_NAMES.filter(n => !next.includes(n));
+  const joins = pickN(away, Math.random() < 0.55 ? rnd(1,2) : 0);
+  next = [...next, ...joins];
+  if (next.length < 3) next = [...next, ...pickN(away.filter(n=>!next.includes(n)), 3 - next.length)];
+  return next.slice(0, 12);
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Msg {
