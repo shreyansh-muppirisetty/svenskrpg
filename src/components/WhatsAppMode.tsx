@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { CallOverlay } from "./CallOverlay";
+import { voiceFor } from "@/lib/voices";
 
 
 // ── Gemini (same as rest of app) ──────────────────────────────────────────────
@@ -10,11 +11,18 @@ const KEY_STORE = "svenska-quest-classroom-gemini-key";
 
 function loadKey() { try { return localStorage.getItem(KEY_STORE) ?? ""; } catch { return ""; } }
 
-interface GeminiTurn { role: "user" | "model"; text: string }
+export interface InlineFile { mime: string; data: string; name?: string }
+interface GeminiTurn { role: "user" | "model"; text: string; files?: InlineFile[] }
 
 async function gemini(key: string, turns: GeminiTurn[], system?: string, maxTokens = 200): Promise<string> {
   const body: Record<string, unknown> = {
-    contents: turns.map(t => ({ role: t.role, parts: [{ text: t.text }] })),
+    contents: turns.map(t => ({
+      role: t.role,
+      parts: [
+        { text: t.text },
+        ...(t.files ?? []).map(f => ({ inline_data: { mime_type: f.mime, data: f.data } })),
+      ],
+    })),
     generationConfig: { temperature: 0.9, maxOutputTokens: maxTokens },
   };
   if (system) body.system_instruction = { parts: [{ text: system }] };
@@ -59,8 +67,10 @@ const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella",
 
 interface Msg {
   id: number; role: "user" | "contact"; text: string;
-  type: "text" | "image" | "audio"; time: string;
+  type: "text" | "image" | "audio" | "file"; time: string;
   sender?: string; imageDesc?: string; duration?: string;
+  /** Attachment the player sent (data URL) */
+  dataUrl?: string; mime?: string; fileName?: string;
 }
 
 let _id = 0;
@@ -139,7 +149,7 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice: msg.sender ? voiceFor(msg.sender) : undefined }),
       });
       if (!res.ok) throw new Error(String(res.status));
       const blob = await res.blob();
@@ -156,10 +166,21 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
   function toggleAudio() {
     if (typeof window === "undefined") return;
     if (playing) { stop(); return; }
-    const text = msg.text || "Hej!";
     setPlaying(true);
 
-    const voice = "speechSynthesis" in window ? pickSwedishVoice() : null;
+    // Real recorded / uploaded audio → play the actual file
+    if (msg.dataUrl) {
+      const audio = new Audio(msg.dataUrl);
+      audioRef.current = audio;
+      audio.onended = () => setPlaying(false);
+      audio.onerror = () => setPlaying(false);
+      void audio.play().catch(() => setPlaying(false));
+      return;
+    }
+
+    const text = msg.text || "Hej!";
+
+    const voice = "speechSynthesis" in window && !msg.sender ? pickSwedishVoice() : null;
     if (voice) {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
@@ -190,8 +211,15 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
           padding: msg.type==="image" ? 2 : "6px 10px 4px",
         }}>
           {msg.type==="image" && (
-            <img src={`https://picsum.photos/seed/${(msg.sender||"u")+msg.id}/200/140`}
-              alt={msg.imageDesc||"photo"} style={{width:200,height:140,objectFit:"cover",display:"block"}}/>
+            <img src={msg.dataUrl || `https://picsum.photos/seed/${(msg.sender||"u")+msg.id}/200/140`}
+              alt={msg.imageDesc||"photo"} style={{width:200,maxHeight:200,objectFit:"cover",display:"block"}}/>
+          )}
+          {msg.type==="file" && (
+            <a href={msg.dataUrl} download={msg.fileName}
+              className="flex items-center gap-2 px-1 py-1" style={{minWidth:160}}>
+              <span className="w-7 h-7 border-2 border-border flex items-center justify-center bg-accent text-[12px] shrink-0">📄</span>
+              <span className="text-sm truncate">{msg.fileName || "fil"}</span>
+            </a>
           )}
           {msg.type==="audio" && (
             <div className="flex items-center gap-2 px-2 py-1" style={{minWidth:180}}>
@@ -204,7 +232,7 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
             </div>
           )}
           {msg.type==="text" && <p className="text-sm leading-snug"><RichText text={msg.text}/></p>}
-          {msg.type==="image" && msg.text && <p className="text-sm px-1 pt-1"><RichText text={msg.text}/></p>}
+          {(msg.type==="image"||msg.type==="file") && msg.text && <p className="text-sm px-1 pt-1"><RichText text={msg.text}/></p>}
           <div className="flex items-center justify-end gap-1 mt-0.5">
             <span className="font-pixel text-[7px] text-muted-foreground">{msg.time}</span>
             {sent && <span className="font-pixel text-[7px] text-primary">✓✓</span>}
