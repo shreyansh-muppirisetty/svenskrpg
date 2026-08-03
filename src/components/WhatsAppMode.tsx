@@ -334,6 +334,91 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setActive(null);
   }
 
+  // ── Living chat: presence drift, background chatter and offline catch-up ────
+
+  const stateRef = useRef({ convos, presence, active, calling, typing });
+  stateRef.current = { convos, presence, active, calling, typing };
+  const busyRef = useRef(false);
+
+  useEffect(() => {
+    try { localStorage.setItem(STORE, JSON.stringify({ convos, presence, left: Date.now() })); } catch { /* ignore */ }
+  }, [convos, presence]);
+
+  function pushGroup(arr: {name:string;text:string;type?:string;imageDesc?:string;duration?:string}[]) {
+    if (!arr.length) return;
+    setConvos(c => ({
+      ...c,
+      class: [...c.class, ...arr.map(m => ({
+        id: nid(), time: ts(), role: "contact" as const, sender: m.name,
+        text: m.text || m.imageDesc || "", type: (m.type as Msg["type"]) || "text",
+        imageDesc: m.imageDesc, duration: m.duration,
+      }))],
+    }));
+    if (stateRef.current.active !== "class") setUnread(u => ({ ...u, class: u.class + arr.length }));
+  }
+
+  async function groupChatter(count: number, note: string) {
+    if (!key || count <= 0 || busyRef.current) return;
+    busyRef.current = true;
+    try {
+      const online = stateRef.current.presence;
+      const recent = stateRef.current.convos.class.slice(-8).map(m => `${m.sender || "Du"}: ${m.text}`).join("\n");
+      const raw = await gemini(key, [{
+        role: "user",
+        text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
+      }], undefined, 120 + count * 45);
+      pushGroup(parseArr(raw).slice(0, count));
+    } catch { /* silent background failure */ }
+    busyRef.current = false;
+  }
+
+  async function soloChatter(cid: CID, count: number) {
+    if (!key || count <= 0 || cid === "class") return;
+    try {
+      const history = stateRef.current.convos[cid].slice(-8).map(m => `${m.role === "user" ? "Du" : CONTACTS.find(c=>c.id===cid)?.name}: ${m.text}`).join("\n");
+      const raw = await gemini(key, [{
+        role: "user",
+        text: `Recent chat:\n${history || "(tom chatt)"}\nWrite exactly ${count} short new messages you send on your own while the player is away (double-texting). Swedish, very short. Return ONLY a JSON array of strings: ["hallå?","svara typ"]`,
+      }], PERSONAS[cid], 100);
+      const arr = parseArr<string>(raw).slice(0, count).filter(t => typeof t === "string" && t.trim());
+      if (!arr.length) return;
+      setConvos(c => ({ ...c, [cid]: [...c[cid], ...arr.map(t => ({ id: nid(), time: ts(), role: "contact" as const, text: t.trim(), type: "text" as const }))] }));
+      if (stateRef.current.active !== cid) setUnread(u => ({ ...u, [cid]: u[cid] + arr.length }));
+    } catch { /* silent */ }
+  }
+
+  // Catch up on everything that happened while the player was in another mode.
+  useEffect(() => {
+    const left = saved.current?.left;
+    if (!key || !left) return;
+    const mins = (Date.now() - left) / 60000;
+    if (mins < 1) return;
+    setPresence(p => driftPresence(p));
+    const n = Math.min(MAX_OFFLINE_GROUP, Math.max(1, Math.round(mins / 2)));
+    void groupChatter(n, `The player has been offline for about ${Math.round(mins)} minutes — this is everything they missed.`);
+    for (const cid of pickN(["johnny","jacob","sam"] as CID[], Math.random() < 0.5 ? rnd(1,2) : 0)) {
+      void soloChatter(cid, rnd(1, MAX_OFFLINE_SOLO));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // While the app is open the class keeps chatting on its own.
+  useEffect(() => {
+    if (!key) return;
+    const i = setInterval(() => {
+      if (stateRef.current.calling || stateRef.current.typing || busyRef.current) return;
+      setPresence(p => (Math.random() < 0.5 ? driftPresence(p) : p));
+      if (stateRef.current.convos.class.length && Math.random() < 0.55) {
+        void groupChatter(rnd(1, 3), "Continue the conversation naturally right now.");
+      } else if (Math.random() < 0.15) {
+        void soloChatter(pickN(["johnny","jacob","sam"] as CID[], 1)[0], 1);
+      }
+    }, 45000);
+    return () => clearInterval(i);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+
   async function openChat(id: CID) {
     setActive(id); setErr("");
     setUnread(u=>({...u,[id]:0}));
