@@ -331,6 +331,8 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   function clearAll() {
     setConvos({johnny:[],jacob:[],sam:[],class:[]});
     setUnread({johnny:0,jacob:0,sam:0,class:0});
+    setPresence(pickN(CLASS_NAMES, rnd(4,7)));
+    try { localStorage.removeItem(STORE); } catch { /* ignore */ }
     setActive(null);
   }
 
