@@ -550,6 +550,28 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         .join("\n")
     : "";
 
+  function endCall(transcript: { name: string; text: string }[]) {
+    const cid = calling;
+    setCalling(null);
+    if (!cid || !transcript.length) return;
+    // Fold what was said on the call into the chat history, so later chats
+    // (and the next call's `memory`) actually remember it.
+    setConvos(c => ({
+      ...c,
+      [cid]: [
+        ...c[cid],
+        ...transcript.map(l => ({
+          id: nid(),
+          time: ts(),
+          type: "text" as const,
+          role: (l.name === "Du" ? "user" : "contact") as Msg["role"],
+          sender: l.name === "Du" ? undefined : l.name,
+          text: `📞 ${l.text}`,
+        })),
+      ],
+    }));
+  }
+
   const overlay = calling && callContact ? (
     <CallOverlay
       contact={{name:callContact.name, initials:callContact.initials, color:callContact.color}}
@@ -557,7 +579,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       apiKey={key}
       memory={callMemory}
       group={calling === "class" ? { chars: CLASS_CHARS, names: CLASS_NAMES } : undefined}
-      onEnd={()=>setCalling(null)}
+      onEnd={endCall}
     />
   ) : null;
 

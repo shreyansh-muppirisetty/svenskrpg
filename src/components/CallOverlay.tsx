@@ -71,7 +71,7 @@ export interface GroupCall {
   names: string[];
 }
 
-interface Line { name: string; text: string }
+export interface Line { name: string; text: string }
 
 export function CallOverlay({
   contact, persona, apiKey, onEnd, memory, group,
@@ -79,7 +79,8 @@ export function CallOverlay({
   contact: CallContact;
   persona: string;
   apiKey: string;
-  onEnd: () => void;
+  /** Called on hangup with the full call transcript, so the parent can remember what was said. */
+  onEnd: (transcript: Line[]) => void;
   /** Recent chat history so they remember what was said in the chat. */
   memory?: string;
   /** When set, this is a group call. */
@@ -105,6 +106,8 @@ export function CallOverlay({
   });
 
   const historyRef = useRef<Turn[]>([]);
+  /** Full call transcript (unlike `lines`, which is trimmed for on-screen display). */
+  const transcriptRef = useRef<Line[]>([]);
   const recRef = useRef<SRType | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const aliveRef = useRef(true);
@@ -203,6 +206,7 @@ export function CallOverlay({
     if (!aliveRef.current) return;
     setPhase("thinking");
     historyRef.current = [...historyRef.current.slice(-10), { role: "user", text }];
+    transcriptRef.current.push({ name: "Du", text });
     try {
       if (group) {
         // A random handful of the people on the call actually answer each turn.
@@ -216,11 +220,13 @@ export function CallOverlay({
         const arr = parseArr<Line>(raw).filter((l) => l && l.text);
         const out = arr.length ? arr : [{ name: speakers[0], text: "Hallå? Jag hörde inte." }];
         historyRef.current = [...historyRef.current, { role: "model", text: out.map((l) => `${l.name}: ${l.text}`).join("\n") }];
+        transcriptRef.current.push(...out);
         await playLines(out);
       } else {
         const reply = await gemini(apiKey, historyRef.current, systemRef.current);
         if (!aliveRef.current) return;
         historyRef.current = [...historyRef.current, { role: "model", text: reply }];
+        transcriptRef.current.push({ name: contact.name, text: reply });
         await playLines([{ name: contact.name, text: reply }]);
       }
     } catch (e) {
@@ -249,11 +255,13 @@ export function CallOverlay({
           const arr = parseArr<Line>(raw).filter((l) => l && l.text);
           const out = arr.length ? arr : greeters.map((n) => ({ name: n, text: "Hallå!" }));
           historyRef.current = [{ role: "model", text: out.map((l) => `${l.name}: ${l.text}`).join("\n") }];
+          transcriptRef.current.push(...out);
           await playLines(out);
         } else {
           const greet = await gemini(apiKey, [{ role: "user", text: "Du svarar precis i telefonen. Säg en kort naturlig hälsning på svenska, en mening." }], systemRef.current);
           if (!aliveRef.current) return;
           historyRef.current = [{ role: "model", text: greet }];
+          transcriptRef.current.push({ name: contact.name, text: greet });
           await playLines([{ name: contact.name, text: greet }]);
         }
       } catch (e) {
@@ -331,7 +339,7 @@ export function CallOverlay({
           className="h-14 w-14 border-2 border-border bg-card font-pixel text-[9px] shadow-pixel-sm active:translate-y-0.5">
           {muted ? "🔇" : "🎤"}
         </button>
-        <button type="button" onClick={() => { aliveRef.current = false; setPhase("ended"); onEnd(); }}
+        <button type="button" onClick={() => { aliveRef.current = false; setPhase("ended"); onEnd(transcriptRef.current); }}
           className="h-14 w-20 border-2 border-border bg-destructive font-pixel text-[9px] text-white shadow-pixel-sm active:translate-y-0.5">
           LÄGG PÅ
         </button>
