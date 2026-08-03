@@ -285,7 +285,18 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const key = loadKey();
   const [active, setActive] = useState<CID|null>(null);
   const [calling, setCalling] = useState<CID|null>(null);
-  const [convos, setConvos] = useState<Record<CID,Msg[]>>({johnny:[],jacob:[],sam:[],class:[]});
+  const saved = useRef<{convos?:Record<CID,Msg[]>; presence?:string[]; left?:number} | null>(null);
+  if (saved.current === null) {
+    try { saved.current = JSON.parse(localStorage.getItem(STORE) || "null") ?? {}; } catch { saved.current = {}; }
+    const all = Object.values(saved.current?.convos ?? {}).flat() as Msg[];
+    _id = all.reduce((m, x) => Math.max(m, x.id || 0), 0);
+  }
+  const [convos, setConvos] = useState<Record<CID,Msg[]>>(
+    saved.current?.convos ?? {johnny:[],jacob:[],sam:[],class:[]}
+  );
+  const [presence, setPresence] = useState<string[]>(
+    saved.current?.presence?.length ? saved.current.presence : pickN(CLASS_NAMES, rnd(4,7))
+  );
   const [input, setInput] = useState("");
   const [att, setAtt] = useState<{dataUrl:string; mime:string; name:string; kind:"image"|"audio"|"file"}|null>(null);
   const [recording, setRecording] = useState(false);
