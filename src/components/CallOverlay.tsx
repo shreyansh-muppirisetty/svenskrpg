@@ -88,8 +88,7 @@ export function CallOverlay({
 }) {
   const [phase, setPhase] = useState<Phase>("ringing");
   const [heard, setHeard] = useState("");
-  const [caption, setCaption] = useState<Line | null>(null);
-  const [captionVisible, setCaptionVisible] = useState(false);
+  const [lines, setLines] = useState<Line[]>([]);
   const [err, setErr] = useState("");
   const [secs, setSecs] = useState(0);
   const [muted, setMuted] = useState(false);
@@ -198,12 +197,11 @@ export function CallOverlay({
     setPhase("speaking");
     for (const l of arr) {
       if (!aliveRef.current) return;
-      setCaption(l);
-      setCaptionVisible(true);
+      setLines((prev) => [...prev.slice(-5), l]);
       await speak(l.text, l.name);
     }
-    if (aliveRef.current) setCaptionVisible(false);
   }, [speak]);
+
   const respond = useCallback(async (text: string) => {
     if (!aliveRef.current) return;
     setPhase("thinking");
@@ -306,7 +304,7 @@ export function CallOverlay({
     : "samtal avslutat";
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-background/95 p-6 relative">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-background/95 p-6">
       <div className="flex flex-col items-center gap-3 pt-16">
         <div className="flex h-24 w-24 items-center justify-center border-2 border-border font-pixel text-[16px] text-white shadow-pixel-sm"
           style={{ background: contact.color }}>{contact.initials}</div>
@@ -321,23 +319,20 @@ export function CallOverlay({
         {err && <p className="max-w-xs text-center font-pixel text-[8px] text-destructive">✗ {err}</p>}
       </div>
 
-      {caption && (
-        <div
-          className={`pointer-events-none absolute right-4 top-1/2 max-w-[70%] -translate-y-1/2 text-right transition-opacity duration-500 sm:max-w-[45%] ${
-            captionVisible ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <p className="font-pixel text-[7px] text-muted-foreground">{caption.name}</p>
-          <p className="mt-1 inline-block border-2 border-border bg-card/90 p-2 text-sm leading-snug shadow-pixel-sm">{caption.text}</p>
-        </div>
-      )}
-
-      {heard && (
-        <div className="max-w-sm text-center">
-          <p className="font-pixel text-[7px] text-muted-foreground">Du</p>
-          <p className="mt-1 inline-block border-2 border-border bg-accent/90 p-2 text-sm leading-snug shadow-pixel-sm">{heard}</p>
-        </div>
-      )}
+      <div className="w-full max-w-sm space-y-2">
+        {lines.slice(-3).map((l, i) => (
+          <div key={`${l.name}-${i}-${l.text.slice(0, 8)}`} className="border-2 border-border bg-card p-3">
+            <p className="font-pixel text-[7px] text-muted-foreground">{l.name}</p>
+            <p className="text-sm leading-snug">{l.text}</p>
+          </div>
+        ))}
+        {heard && (
+          <div className="border-2 border-border bg-accent p-3">
+            <p className="font-pixel text-[7px] text-muted-foreground">Du</p>
+            <p className="text-sm leading-snug">{heard}</p>
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center gap-4 pb-10">
         <button type="button" onClick={toggleMute}

@@ -107,7 +107,6 @@ interface Msg {
   sender?: string; imageDesc?: string; duration?: string;
   /** Attachment the player sent (data URL) */
   dataUrl?: string; mime?: string; fileName?: string;
-  hidden?: boolean;
 }
 
 let _id = 0;
@@ -425,7 +424,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   async function openChat(id: CID) {
     setActive(id); setErr("");
     setUnread(u=>({...u,[id]:0}));
-    if (convos[id].filter(m=>!m.hidden).length > 0) return;
+    if (convos[id].length > 0) return;
     setTyping(true);
     try {
       if (id === "class") {
@@ -567,8 +566,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
           type: "text" as const,
           role: (l.name === "Du" ? "user" : "contact") as Msg["role"],
           sender: l.name === "Du" ? undefined : l.name,
-          text: l.text,
-          hidden: true,
+          text: `📞 ${l.text}`,
         })),
       ],
     }));
@@ -605,7 +603,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       {!key && <p className="font-pixel text-[9px] text-destructive px-1">Ange Gemini API-nyckel i Klassrumsläget först.</p>}
       <div className="pixel-panel rounded-sm bg-card overflow-hidden">
         {CONTACTS.map((c,i)=>{
-          const last = [...convos[c.id as CID]].reverse().find(m=>!m.hidden);
+          const last = convos[c.id as CID].at(-1);
           const preview = last ? (last.type==="image"?"📷 Bild":last.type==="audio"?"🎤 Röstmeddelande":last.text) : null;
           return (
             <div key={c.id}
@@ -670,10 +668,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       {err && <p className="font-pixel text-[8px] text-destructive mb-2 px-1">✗ {err}</p>}
 
       <div className="flex-1 overflow-y-auto px-2 py-2 border-2 border-border bg-secondary/20 mb-3">
-        {convos[active!].filter(m=>!m.hidden).length===0 && !typing && (
+        {convos[active!].length===0 && !typing && (
           <p className="font-pixel text-[8px] text-muted-foreground text-center py-4">Laddar konversation…</p>
         )}
-        {convos[active!].filter(m=>!m.hidden).map(msg=><Bubble key={msg.id} msg={msg} isGroup={isGroup}/>)}
+        {convos[active!].map(msg=><Bubble key={msg.id} msg={msg} isGroup={isGroup}/>)}
         {typing && (
           <div className="flex justify-start mb-2">
             {isGroup && <div className="w-6 h-6 border-2 border-border bg-secondary mr-1 shrink-0"/>}
