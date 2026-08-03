@@ -251,6 +251,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const [calling, setCalling] = useState<CID|null>(null);
   const [convos, setConvos] = useState<Record<CID,Msg[]>>({johnny:[],jacob:[],sam:[],class:[]});
   const [input, setInput] = useState("");
+  const [att, setAtt] = useState<{dataUrl:string; mime:string; name:string; kind:"image"|"audio"|"file"}|null>(null);
+  const [recording, setRecording] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const recRef = useRef<MediaRecorder|null>(null);
   const [typing, setTyping] = useState(false);
   const [err, setErr] = useState("");
   const [unread, setUnread] = useState<Record<CID,number>>({johnny:2,jacob:1,sam:0,class:5});
@@ -307,12 +311,66 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setTyping(false);
   }
 
+  function kindOf(mime: string): "image"|"audio"|"file" {
+    if (mime.startsWith("image/")) return "image";
+    if (mime.startsWith("audio/")) return "audio";
+    return "file";
+  }
+
+  function toDataUrl(blob: Blob): Promise<string> {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result));
+      r.onerror = () => rej(new Error("Kunde inte läsa filen"));
+      r.readAsDataURL(blob);
+    });
+  }
+
+  async function pickFile(f: File | undefined | null) {
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) { setErr("Filen är för stor (max 8 MB)"); return; }
+    try {
+      const dataUrl = await toDataUrl(f);
+      setAtt({ dataUrl, mime: f.type || "application/octet-stream", name: f.name, kind: kindOf(f.type || "") });
+      setErr("");
+    } catch (e) { setErr(e instanceof Error ? e.message : "Fel"); }
+  }
+
+  async function toggleRecord() {
+    if (recording) { recRef.current?.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setRecording(false);
+        const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+        const dataUrl = await toDataUrl(blob);
+        setAtt({ dataUrl, mime: blob.type, name: "röstmeddelande", kind: "audio" });
+      };
+      recRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch { setErr("Mikrofonen blockerad — tillåt mikrofon i webbläsaren."); }
+  }
+
   async function send() {
     const text = input.trim();
-    if (!text || typing || !active) return;
-    setInput(""); setErr("");
-    add(active, {role:"user", text, type:"text"});
+    if ((!text && !att) || typing || !active) return;
+    const attachment = att;
+    setInput(""); setAtt(null); setErr("");
+    add(active, attachment
+      ? {role:"user", text, type:attachment.kind, dataUrl:attachment.dataUrl, mime:attachment.mime, fileName:attachment.name}
+      : {role:"user", text, type:"text"});
     setTyping(true);
+    const files: InlineFile[] = attachment
+      ? [{ mime: attachment.mime.split(";")[0], data: attachment.dataUrl.split(",")[1] ?? "", name: attachment.name }]
+      : [];
+    const attNote = attachment
+      ? `\nThe user also attached ${attachment.kind === "image" ? "an image" : attachment.kind === "audio" ? "a voice note (listen to it)" : `a file (${attachment.name})`} — actually look at/listen to it and react specifically to its real content.`
+      : "";
     try {
       if (active === "class") {
         const recent = convos.class.slice(-5).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
@@ -322,7 +380,8 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
           : "";
         const raw = await gemini(key, [{
           role: "user",
-          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          files,
+          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"${attNote}\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
         for (const m of arr) {
@@ -334,7 +393,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
           role: m.role==="user" ? "user" : "model" as "user"|"model",
           text: m.text,
         }));
-        history.push({role:"user", text});
+        history.push({role:"user", text: text + attNote, files});
         const reply = await gemini(key, history, PERSONAS[active], 100);
         add(active, {role:"contact", text:reply.trim(), type:"text"});
       }
