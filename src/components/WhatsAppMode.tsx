@@ -529,12 +529,31 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
             ))}
           </div>
         )}
+        {att && (
+          <div className="mb-2 flex items-center gap-2 border-2 border-border bg-card p-2">
+            {att.kind==="image"
+              ? <img src={att.dataUrl} alt="bifogad bild" className="h-10 w-10 border-2 border-border object-cover"/>
+              : <span className="flex h-10 w-10 items-center justify-center border-2 border-border bg-accent text-[14px]">{att.kind==="audio"?"🎤":"📄"}</span>}
+            <span className="flex-1 truncate text-sm">{att.name}</span>
+            <button type="button" onClick={()=>setAtt(null)}
+              className="border-2 border-border bg-destructive/10 px-2 py-1 font-pixel text-[8px] text-destructive">✗</button>
+          </div>
+        )}
         <div className="flex gap-2">
+          <input ref={fileRef} type="file" hidden
+            accept="image/*,audio/*,.pdf,.txt,.doc,.docx"
+            onChange={e=>{ void pickFile(e.target.files?.[0]); e.target.value=""; }}/>
+          <button type="button" aria-label="Bifoga fil" disabled={typing} onClick={()=>fileRef.current?.click()}
+            className="rounded-sm border-2 border-border bg-card px-3 py-2 font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">📎</button>
+          <button type="button" aria-label={recording?"Stoppa inspelning":"Spela in röstmeddelande"} disabled={typing}
+            onClick={()=>void toggleRecord()}
+            className={`rounded-sm border-2 border-border px-3 py-2 font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${recording?"bg-destructive text-white":"bg-card"}`}>
+            {recording?"■":"🎤"}</button>
           <input value={input} onChange={e=>setInput(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ if(mentionOpts.length>0){ e.preventDefault(); applyMention(mentionOpts[0]); } else send(); } }}
             placeholder={isGroup?"Skriv… (@namn för att kalla ut någon)":"Skriv ett meddelande…"} spellCheck={false}
             className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2 text-sm outline-none focus:border-ring"/>
-          <button onClick={send} disabled={!input.trim()||typing}
+          <button onClick={send} disabled={(!input.trim()&&!att)||typing}
             className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
             SKICKA
           </button>
