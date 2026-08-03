@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { CallOverlay } from "./CallOverlay";
+import { voiceFor } from "@/lib/voices";
 
 
 // ── Gemini (same as rest of app) ──────────────────────────────────────────────
@@ -10,11 +11,18 @@ const KEY_STORE = "svenska-quest-classroom-gemini-key";
 
 function loadKey() { try { return localStorage.getItem(KEY_STORE) ?? ""; } catch { return ""; } }
 
-interface GeminiTurn { role: "user" | "model"; text: string }
+export interface InlineFile { mime: string; data: string; name?: string }
+interface GeminiTurn { role: "user" | "model"; text: string; files?: InlineFile[] }
 
 async function gemini(key: string, turns: GeminiTurn[], system?: string, maxTokens = 200): Promise<string> {
   const body: Record<string, unknown> = {
-    contents: turns.map(t => ({ role: t.role, parts: [{ text: t.text }] })),
+    contents: turns.map(t => ({
+      role: t.role,
+      parts: [
+        { text: t.text },
+        ...(t.files ?? []).map(f => ({ inline_data: { mime_type: f.mime, data: f.data } })),
+      ],
+    })),
     generationConfig: { temperature: 0.9, maxOutputTokens: maxTokens },
   };
   if (system) body.system_instruction = { parts: [{ text: system }] };
@@ -59,8 +67,10 @@ const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella",
 
 interface Msg {
   id: number; role: "user" | "contact"; text: string;
-  type: "text" | "image" | "audio"; time: string;
+  type: "text" | "image" | "audio" | "file"; time: string;
   sender?: string; imageDesc?: string; duration?: string;
+  /** Attachment the player sent (data URL) */
+  dataUrl?: string; mime?: string; fileName?: string;
 }
 
 let _id = 0;
@@ -139,7 +149,7 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice: msg.sender ? voiceFor(msg.sender) : undefined }),
       });
       if (!res.ok) throw new Error(String(res.status));
       const blob = await res.blob();
@@ -156,10 +166,21 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
   function toggleAudio() {
     if (typeof window === "undefined") return;
     if (playing) { stop(); return; }
-    const text = msg.text || "Hej!";
     setPlaying(true);
 
-    const voice = "speechSynthesis" in window ? pickSwedishVoice() : null;
+    // Real recorded / uploaded audio → play the actual file
+    if (msg.dataUrl) {
+      const audio = new Audio(msg.dataUrl);
+      audioRef.current = audio;
+      audio.onended = () => setPlaying(false);
+      audio.onerror = () => setPlaying(false);
+      void audio.play().catch(() => setPlaying(false));
+      return;
+    }
+
+    const text = msg.text || "Hej!";
+
+    const voice = "speechSynthesis" in window && !msg.sender ? pickSwedishVoice() : null;
     if (voice) {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
@@ -190,8 +211,15 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
           padding: msg.type==="image" ? 2 : "6px 10px 4px",
         }}>
           {msg.type==="image" && (
-            <img src={`https://picsum.photos/seed/${(msg.sender||"u")+msg.id}/200/140`}
-              alt={msg.imageDesc||"photo"} style={{width:200,height:140,objectFit:"cover",display:"block"}}/>
+            <img src={msg.dataUrl || `https://picsum.photos/seed/${(msg.sender||"u")+msg.id}/200/140`}
+              alt={msg.imageDesc||"photo"} style={{width:200,maxHeight:200,objectFit:"cover",display:"block"}}/>
+          )}
+          {msg.type==="file" && (
+            <a href={msg.dataUrl} download={msg.fileName}
+              className="flex items-center gap-2 px-1 py-1" style={{minWidth:160}}>
+              <span className="w-7 h-7 border-2 border-border flex items-center justify-center bg-accent text-[12px] shrink-0">📄</span>
+              <span className="text-sm truncate">{msg.fileName || "fil"}</span>
+            </a>
           )}
           {msg.type==="audio" && (
             <div className="flex items-center gap-2 px-2 py-1" style={{minWidth:180}}>
@@ -204,7 +232,7 @@ function Bubble({ msg, isGroup }: { msg: Msg; isGroup: boolean }) {
             </div>
           )}
           {msg.type==="text" && <p className="text-sm leading-snug"><RichText text={msg.text}/></p>}
-          {msg.type==="image" && msg.text && <p className="text-sm px-1 pt-1"><RichText text={msg.text}/></p>}
+          {(msg.type==="image"||msg.type==="file") && msg.text && <p className="text-sm px-1 pt-1"><RichText text={msg.text}/></p>}
           <div className="flex items-center justify-end gap-1 mt-0.5">
             <span className="font-pixel text-[7px] text-muted-foreground">{msg.time}</span>
             {sent && <span className="font-pixel text-[7px] text-primary">✓✓</span>}
@@ -223,6 +251,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const [calling, setCalling] = useState<CID|null>(null);
   const [convos, setConvos] = useState<Record<CID,Msg[]>>({johnny:[],jacob:[],sam:[],class:[]});
   const [input, setInput] = useState("");
+  const [att, setAtt] = useState<{dataUrl:string; mime:string; name:string; kind:"image"|"audio"|"file"}|null>(null);
+  const [recording, setRecording] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const recRef = useRef<MediaRecorder|null>(null);
   const [typing, setTyping] = useState(false);
   const [err, setErr] = useState("");
   const [unread, setUnread] = useState<Record<CID,number>>({johnny:2,jacob:1,sam:0,class:5});
@@ -279,12 +311,66 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setTyping(false);
   }
 
+  function kindOf(mime: string): "image"|"audio"|"file" {
+    if (mime.startsWith("image/")) return "image";
+    if (mime.startsWith("audio/")) return "audio";
+    return "file";
+  }
+
+  function toDataUrl(blob: Blob): Promise<string> {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result));
+      r.onerror = () => rej(new Error("Kunde inte läsa filen"));
+      r.readAsDataURL(blob);
+    });
+  }
+
+  async function pickFile(f: File | undefined | null) {
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) { setErr("Filen är för stor (max 8 MB)"); return; }
+    try {
+      const dataUrl = await toDataUrl(f);
+      setAtt({ dataUrl, mime: f.type || "application/octet-stream", name: f.name, kind: kindOf(f.type || "") });
+      setErr("");
+    } catch (e) { setErr(e instanceof Error ? e.message : "Fel"); }
+  }
+
+  async function toggleRecord() {
+    if (recording) { recRef.current?.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setRecording(false);
+        const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+        const dataUrl = await toDataUrl(blob);
+        setAtt({ dataUrl, mime: blob.type, name: "röstmeddelande", kind: "audio" });
+      };
+      recRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch { setErr("Mikrofonen blockerad — tillåt mikrofon i webbläsaren."); }
+  }
+
   async function send() {
     const text = input.trim();
-    if (!text || typing || !active) return;
-    setInput(""); setErr("");
-    add(active, {role:"user", text, type:"text"});
+    if ((!text && !att) || typing || !active) return;
+    const attachment = att;
+    setInput(""); setAtt(null); setErr("");
+    add(active, attachment
+      ? {role:"user", text, type:attachment.kind, dataUrl:attachment.dataUrl, mime:attachment.mime, fileName:attachment.name}
+      : {role:"user", text, type:"text"});
     setTyping(true);
+    const files: InlineFile[] = attachment
+      ? [{ mime: attachment.mime.split(";")[0], data: attachment.dataUrl.split(",")[1] ?? "", name: attachment.name }]
+      : [];
+    const attNote = attachment
+      ? `\nThe user also attached ${attachment.kind === "image" ? "an image" : attachment.kind === "audio" ? "a voice note (listen to it)" : `a file (${attachment.name})`} — actually look at/listen to it and react specifically to its real content.`
+      : "";
     try {
       if (active === "class") {
         const recent = convos.class.slice(-5).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
@@ -294,7 +380,8 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
           : "";
         const raw = await gemini(key, [{
           role: "user",
-          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          files,
+          text: `Swedish class WhatsApp group. Recent messages:\n${recent}\nUser just sent: "${text}"${attNote}\nGenerate 2-4 realistic short replies from classmates. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
         for (const m of arr) {
@@ -306,7 +393,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
           role: m.role==="user" ? "user" : "model" as "user"|"model",
           text: m.text,
         }));
-        history.push({role:"user", text});
+        history.push({role:"user", text: text + attNote, files});
         const reply = await gemini(key, history, PERSONAS[active], 100);
         add(active, {role:"contact", text:reply.trim(), type:"text"});
       }
@@ -442,12 +529,31 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
             ))}
           </div>
         )}
+        {att && (
+          <div className="mb-2 flex items-center gap-2 border-2 border-border bg-card p-2">
+            {att.kind==="image"
+              ? <img src={att.dataUrl} alt="bifogad bild" className="h-10 w-10 border-2 border-border object-cover"/>
+              : <span className="flex h-10 w-10 items-center justify-center border-2 border-border bg-accent text-[14px]">{att.kind==="audio"?"🎤":"📄"}</span>}
+            <span className="flex-1 truncate text-sm">{att.name}</span>
+            <button type="button" onClick={()=>setAtt(null)}
+              className="border-2 border-border bg-destructive/10 px-2 py-1 font-pixel text-[8px] text-destructive">✗</button>
+          </div>
+        )}
         <div className="flex gap-2">
+          <input ref={fileRef} type="file" hidden
+            accept="image/*,audio/*,.pdf,.txt,.doc,.docx"
+            onChange={e=>{ void pickFile(e.target.files?.[0]); e.target.value=""; }}/>
+          <button type="button" aria-label="Bifoga fil" disabled={typing} onClick={()=>fileRef.current?.click()}
+            className="rounded-sm border-2 border-border bg-card px-3 py-2 font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">📎</button>
+          <button type="button" aria-label={recording?"Stoppa inspelning":"Spela in röstmeddelande"} disabled={typing}
+            onClick={()=>void toggleRecord()}
+            className={`rounded-sm border-2 border-border px-3 py-2 font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${recording?"bg-destructive text-white":"bg-card"}`}>
+            {recording?"■":"🎤"}</button>
           <input value={input} onChange={e=>setInput(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ if(mentionOpts.length>0){ e.preventDefault(); applyMention(mentionOpts[0]); } else send(); } }}
             placeholder={isGroup?"Skriv… (@namn för att kalla ut någon)":"Skriv ett meddelande…"} spellCheck={false}
             className="flex-1 rounded-sm border-2 border-border bg-card px-3 py-2 text-sm outline-none focus:border-ring"/>
-          <button onClick={send} disabled={!input.trim()||typing}
+          <button onClick={send} disabled={(!input.trim()&&!att)||typing}
             className="rounded-sm border-2 border-border bg-accent px-4 py-2 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
             SKICKA
           </button>

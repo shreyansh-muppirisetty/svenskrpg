@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { voiceFor } from "@/lib/voices";
 
 // ── Minimal Gemini call (self-contained) ─────────────────────────────────────
 
@@ -57,12 +58,7 @@ function pickSwedishVoice(): SpeechSynthesisVoice | null {
   } catch { return null; }
 }
 
-const TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "sage", "coral"];
-function voiceFor(name: string) {
-  let h = 0;
-  for (const c of name) h = ((h << 5) - h + c.charCodeAt(0)) | 0;
-  return TTS_VOICES[Math.abs(h) % TTS_VOICES.length];
-}
+
 
 type Phase = "ringing" | "listening" | "thinking" | "speaking" | "ended";
 
@@ -199,9 +195,9 @@ export function CallOverlay({
     for (const l of arr) {
       if (!aliveRef.current) return;
       setLines((prev) => [...prev.slice(-5), l]);
-      await speak(l.text, group ? l.name : undefined);
+      await speak(l.text, l.name);
     }
-  }, [speak, group]);
+  }, [speak]);
 
   const respond = useCallback(async (text: string) => {
     if (!aliveRef.current) return;
