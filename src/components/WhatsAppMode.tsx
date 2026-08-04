@@ -444,10 +444,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     busyRef.current = true;
     try {
       const online = stateRef.current.presence;
-      const recent = stateRef.current.convos.class.slice(-8).map(m => `${m.sender || "Du"}: ${m.text}`).join("\n");
+      const recent = (stateRef.current.convos.class ?? []).slice(-8).map(m => `${m.sender || "Du"}: ${m.text}`).join("\n");
       const raw = await gemini(key, [{
         role: "user",
-        text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
+        text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${crossMemory("class")}${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
       }], undefined, 120 + count * 45);
       pushGroup(parseArr<{name:string;text:string;type?:string;imageDesc?:string;duration?:string}>(raw).slice(0, count));
     } catch { /* silent background failure */ }
@@ -457,17 +457,19 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   async function soloChatter(cid: CID, count: number) {
     if (!key || count <= 0 || cid === "class") return;
     try {
-      const history = stateRef.current.convos[cid].slice(-8).map(m => `${m.role === "user" ? "Du" : CONTACTS.find(c=>c.id===cid)?.name}: ${m.text}`).join("\n");
+      const who = CONTACTS.find(c=>c.id===cid)?.name ?? cid;
+      const history = (stateRef.current.convos[cid] ?? []).slice(-8).map(m => `${m.role === "user" ? "Du" : who}: ${m.text}`).join("\n");
       const raw = await gemini(key, [{
         role: "user",
-        text: `Recent chat:\n${history || "(tom chatt)"}\nWrite exactly ${count} short new messages you send on your own while the player is away (double-texting). Swedish, very short. Return ONLY a JSON array of strings: ["hallå?","svara typ"]`,
-      }], PERSONAS[cid], 100);
+        text: `Recent chat:\n${history || "(tom chatt)"}\n${crossMemory(cid)}Write exactly ${count} short new messages you send on your own while the player is away (double-texting). Swedish, very short. Return ONLY a JSON array of strings: ["hallå?","svara typ"]`,
+      }], personaFor(who), 100);
       const arr = parseArr<string>(raw).slice(0, count).filter(t => typeof t === "string" && t.trim());
       if (!arr.length) return;
-      setConvos(c => ({ ...c, [cid]: [...c[cid], ...arr.map(t => ({ id: nid(), time: ts(), role: "contact" as const, text: t.trim(), type: "text" as const }))] }));
-      if (stateRef.current.active !== cid) setUnread(u => ({ ...u, [cid]: u[cid] + arr.length }));
+      setConvos(c => ({ ...c, [cid]: [...(c[cid] ?? []), ...arr.map(t => ({ id: nid(), time: ts(), role: "contact" as const, text: t.trim(), type: "text" as const }))] }));
+      if (stateRef.current.active !== cid) setUnread(u => ({ ...u, [cid]: (u[cid] ?? 0) + arr.length }));
     } catch { /* silent */ }
   }
+
 
   // Catch up on everything that happened while the player was in another mode.
   useEffect(() => {
