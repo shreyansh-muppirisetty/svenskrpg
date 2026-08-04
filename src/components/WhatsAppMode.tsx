@@ -480,7 +480,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setPresence(p => driftPresence(p));
     const n = Math.min(MAX_OFFLINE_GROUP, Math.max(1, Math.round(mins / 2)));
     void groupChatter(n, `The player has been offline for about ${Math.round(mins)} minutes — this is everything they missed.`);
-    for (const cid of pickN(["johnny","jacob","sam"] as CID[], Math.random() < 0.5 ? rnd(1,2) : 0)) {
+    for (const cid of pickN(dmIds, Math.random() < 0.5 ? rnd(1,2) : 0)) {
       void soloChatter(cid, rnd(1, MAX_OFFLINE_SOLO));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -492,10 +492,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     const i = setInterval(() => {
       if (stateRef.current.calling || stateRef.current.typing || busyRef.current) return;
       setPresence(p => (Math.random() < 0.5 ? driftPresence(p) : p));
-      if (stateRef.current.convos.class.length && Math.random() < 0.55) {
+      if ((stateRef.current.convos.class ?? []).length && Math.random() < 0.55) {
         void groupChatter(rnd(1, 3), "Continue the conversation naturally right now.");
       } else if (Math.random() < 0.15) {
-        void soloChatter(pickN(["johnny","jacob","sam"] as CID[], 1)[0], 1);
+        void soloChatter(pickN(dmIds, 1)[0], 1);
       }
     }, 45000);
     return () => clearInterval(i);
@@ -506,7 +506,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   async function openChat(id: CID) {
     setActive(id); setErr("");
     setUnread(u=>({...u,[id]:0}));
-    if (convos[id].length > 0) return;
+    if ((convos[id] ?? []).length > 0) return;
     setTyping(true);
     try {
       if (id === "class") {
@@ -517,15 +517,17 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
         arr.forEach(m => add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration}));
       } else {
+        const who = CONTACTS.find(c=>c.id===id)?.name ?? id;
         const reply = await gemini(key,
-          [{role:"user", text:"Send me one casual opening text like you just randomly texted out of nowhere. One short sentence only. No quotation marks."}],
-          PERSONAS[id], 60
+          [{role:"user", text:`${crossMemory(id)}The user just added/opened a private DM with you. Send one casual opening text — if you two just talked in the class group, refer to it naturally. One short sentence only. No quotation marks.`}],
+          personaFor(who), 60
         );
         add(id, {role:"contact", text:reply.trim(), type:"text"});
       }
     } catch(e) { setErr(e instanceof Error ? e.message : "Fel"); }
     setTyping(false);
   }
+
 
   function kindOf(mime: string): "image"|"audio"|"file" {
     if (mime.startsWith("image/")) return "image";
