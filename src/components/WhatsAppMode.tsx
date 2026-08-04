@@ -787,10 +787,11 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       {err && <p className="font-pixel text-[8px] text-destructive mb-2 px-1">✗ {err}</p>}
 
       <div className="flex-1 overflow-y-auto px-2 py-2 border-2 border-border bg-secondary/20 mb-3">
-        {convos[active!].length===0 && !typing && (
+        {(convos[active!] ?? []).length===0 && !typing && (
           <p className="font-pixel text-[8px] text-muted-foreground text-center py-4">Laddar konversation…</p>
         )}
-        {convos[active!].map(msg=><Bubble key={msg.id} msg={msg} isGroup={isGroup}/>)}
+        {(convos[active!] ?? []).map(msg=><Bubble key={msg.id} msg={msg} isGroup={isGroup}/>)}
+
         {typing && (
           <div className="flex justify-start mb-2">
             {isGroup && <div className="w-6 h-6 border-2 border-border bg-secondary mr-1 shrink-0"/>}
