@@ -44,14 +44,16 @@ function parseArr<T>(raw: string): T[] {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const CONTACTS = [
-  { id: "johnny", name: "Johnny",      initials: "JO", color: "#c0392b", online: true,  sub: "online" },
-  { id: "jacob",  name: "Jacob",       initials: "JA", color: "#16a085", online: false, sub: "last seen today at 14:32" },
-  { id: "sam",    name: "Sam",         initials: "SA", color: "#2980b9", online: true,  sub: "online" },
-  { id: "class",  name: "Klass 8B 🎒", initials: "8B", color: "#8e44ad", online: null,  sub: "22 members", isGroup: true },
-] as const;
+interface Contact { id: string; name: string; initials: string; color: string; sub: string; isGroup?: boolean }
 
-type CID = "johnny" | "jacob" | "sam" | "class";
+const BASE_CONTACTS: Contact[] = [
+  { id: "johnny", name: "Johnny",      initials: "JO", color: "#c0392b", sub: "online" },
+  { id: "jacob",  name: "Jacob",       initials: "JA", color: "#16a085", sub: "last seen today at 14:32" },
+  { id: "sam",    name: "Sam",         initials: "SA", color: "#2980b9", sub: "online" },
+  { id: "class",  name: "Klass 8B 🎒", initials: "8B", color: "#8e44ad", sub: "22 members", isGroup: true },
+];
+
+type CID = string;
 
 const PERSONAS: Record<string, string> = {
   johnny: `You are Johnny, 15yo Swedish student. You think you're the coolest kid in school. Huge ego. Use lots of abbrevs mixed into Swedish: ngl, fr, lowkey, no cap, tbh, bruh, lol. Max 1-2 very short sentences. Never show weakness. Act unbothered. No full stops at end. Speak Swedish — full sentences in Swedish with English slang words mixed in naturally like Swedish teens do.`,
@@ -59,9 +61,30 @@ const PERSONAS: Record<string, string> = {
   sam:    `You are Sam, 15yo Swedish student. COMPLETELY obsessed with football (soccer). Bring football into every single reply no matter how unrelated. 1-2 sentences. Enthusiastic. Speak Swedish. Mix in occasional English football terms naturally.`,
 };
 
+
 const CLASS_CHARS = `Alex: quiet, rarely texts, strict parents, soft-hearted; Hugo: football obsessed, best friends with Sam; Viggo: the user's rival/enemy, rarely joins unless there is drama or he is directly involved, but whenever he does write he is ALWAYS mean, mocking and hostile toward the user specifically (never nice, throws sarcastic insults and put-downs at the user, still friendly-ish to others); Sam: totally obsessed with football, enthusiastic; Jacob: kind and sweet but sensitive, overthinks; Johnny: popular, huge ego, cool, uses slang like ngl/fr/lowkey/no cap, never shows weakness; Emma: class representative, responsible, reminds about homework; Ella: always has the latest gossip; Noah: lurker, mostly short reactions; Lucas: funny and sarcastic, teases everyone; William: tech nerd into games, PCs and AI; Oscar: class clown, memes and jokes; Leo: relaxed, does not care about drama; Filip: competitive, tries to win every discussion; Elias: friendly, tries to stop arguments; Isak: dry humor, very short replies; Nils: loves cars and motorcycles; Maja: loud, energetic, starts conversations; Olivia: popular but kind, voice of reason; Sofia: friendly and supportive; Klara: curious, asks lots of questions`;
 
 const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella","Noah","Lucas","William","Oscar","Leo","Filip","Elias","Isak","Nils","Maja","Olivia","Sofia","Klara"];
+
+/** Personality blurb for one classmate, taken from the class character sheet. */
+const TRAITS: Record<string,string> = Object.fromEntries(
+  CLASS_CHARS.split(";").map(part => {
+    const i = part.indexOf(":");
+    return [part.slice(0, i).trim(), part.slice(i + 1).trim()];
+  }),
+);
+
+const cidOf = (name: string) => name.toLowerCase();
+
+/** Persona used when a classmate is added as a private contact. */
+function personaFor(name: string): string {
+  if (PERSONAS[cidOf(name)]) return PERSONAS[cidOf(name)];
+  return `You are ${name}, a 15yo Swedish student in class 8B. Your personality: ${TRAITS[name] ?? "an ordinary classmate"}. This is a private 1-on-1 WhatsApp DM with the user (a classmate). Reply in Swedish, 1-2 very short teen messages, mixing in English slang naturally, staying completely in character.`;
+}
+
+const initialsOf = (name: string) => name.slice(0, 2).toUpperCase();
+
+
 
 // ── Presence / offline simulation helpers ────────────────────────────────────
 
@@ -285,7 +308,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const key = loadKey();
   const [active, setActive] = useState<CID|null>(null);
   const [calling, setCalling] = useState<CID|null>(null);
-  const saved = useRef<{convos?:Record<CID,Msg[]>; presence?:string[]; left?:number} | null>(null);
+  const saved = useRef<{convos?:Record<CID,Msg[]>; presence?:string[]; left?:number; added?:string[]} | null>(null);
   if (saved.current === null) {
     try { saved.current = JSON.parse(localStorage.getItem(STORE) || "null") ?? {}; } catch { saved.current = {}; }
     const all = Object.values(saved.current?.convos ?? {}).flat() as Msg[];
@@ -294,6 +317,9 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const [convos, setConvos] = useState<Record<CID,Msg[]>>(
     saved.current?.convos ?? {johnny:[],jacob:[],sam:[],class:[]}
   );
+  /** Classmates the player added from the group chat as private contacts. */
+  const [added, setAdded] = useState<string[]>(saved.current?.added ?? []);
+  const [showAdd, setShowAdd] = useState(false);
   const [presence, setPresence] = useState<string[]>(
     saved.current?.presence?.length ? saved.current.presence : pickN(CLASS_NAMES, rnd(4,7))
   );
@@ -306,7 +332,18 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const [err, setErr] = useState("");
   const [unread, setUnread] = useState<Record<CID,number>>({johnny:2,jacob:1,sam:0,class:5});
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const CONTACTS: Contact[] = useMemo(() => {
+    const extra = added
+      .filter(n => !BASE_CONTACTS.some(c => c.id === cidOf(n)))
+      .map(n => ({ id: cidOf(n), name: n, initials: initialsOf(n), color: nameColor(n), sub: "från Klass 8B" }));
+    return [...BASE_CONTACTS, ...extra];
+  }, [added]);
+
+  const dmIds: CID[] = CONTACTS.filter(c => !c.isGroup).map(c => c.id);
   const callContact = CONTACTS.find(c=>c.id===calling);
+
+
 
   const mentionQuery = useMemo(()=>{
     const m = /@([\p{L}]*)$/u.exec(input);
@@ -325,16 +362,60 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[convos,active,typing]);
 
   function add(cid: CID, msg: Omit<Msg,"id"|"time">) {
-    setConvos(c=>({...c,[cid]:[...c[cid],{...msg,id:nid(),time:ts()}]}));
+    setConvos(c=>({...c,[cid]:[...(c[cid] ?? []),{...msg,id:nid(),time:ts()}]}));
+  }
+
+  /** Add a classmate from the group chat as a private contact. */
+  function addContact(name: string) {
+    const id = cidOf(name);
+    setAdded(a => (a.includes(name) ? a : [...a, name]));
+    setConvos(c => (c[id] ? c : { ...c, [id]: [] }));
+    setUnread(u => ({ ...u, [id]: u[id] ?? 0 }));
+    setShowAdd(false);
+    setActive(id);
+  }
+
+  function removeContact(name: string) {
+    const id = cidOf(name);
+    setAdded(a => a.filter(n => n !== name));
+    if (active === id) setActive(null);
+  }
+
+  /** What this person knows from every other chat — so they aren't amnesiac. */
+  function crossMemory(cid: CID): string {
+    const c = stateRef.current?.convos ?? convos;
+    const name = CONTACTS.find(x => x.id === cid)?.name ?? "";
+    const bits: string[] = [];
+    if (cid !== "class") {
+      const inGroup = (c.class ?? [])
+        .slice(-40)
+        .filter(m => m.sender === name || (m.role === "user" && new RegExp(`@?${name}`, "i").test(m.text)))
+        .slice(-8)
+        .map(m => `${m.sender || "Du"}: ${m.text}`);
+      if (inGroup.length) bits.push(`From the class group chat (you remember all of this):\n${inGroup.join("\n")}`);
+    } else {
+      const dms = Object.entries(c)
+        .filter(([id]) => id !== "class")
+        .map(([id, msgs]) => {
+          const who = CONTACTS.find(x => x.id === id)?.name ?? id;
+          const last = (msgs ?? []).slice(-4).map(m => `${m.role === "user" ? "Du" : who}: ${m.text}`);
+          return last.length ? `Private DM between the user and ${who}:\n${last.join("\n")}` : "";
+        })
+        .filter(Boolean);
+      if (dms.length) bits.push(`People also remember their private DMs with the user:\n${dms.join("\n")}`);
+    }
+    return bits.length ? `\n${bits.join("\n\n")}\n` : "";
   }
 
   function clearAll() {
     setConvos({johnny:[],jacob:[],sam:[],class:[]});
     setUnread({johnny:0,jacob:0,sam:0,class:0});
+    setAdded([]);
     setPresence(pickN(CLASS_NAMES, rnd(4,7)));
     try { localStorage.removeItem(STORE); } catch { /* ignore */ }
     setActive(null);
   }
+
 
   // ── Living chat: presence drift, background chatter and offline catch-up ────
 
@@ -343,8 +424,9 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const busyRef = useRef(false);
 
   useEffect(() => {
-    try { localStorage.setItem(STORE, JSON.stringify({ convos, presence, left: Date.now() })); } catch { /* ignore */ }
-  }, [convos, presence]);
+    try { localStorage.setItem(STORE, JSON.stringify({ convos, presence, added, left: Date.now() })); } catch { /* ignore */ }
+  }, [convos, presence, added]);
+
 
   function pushGroup(arr: {name:string;text:string;type?:string;imageDesc?:string;duration?:string}[]) {
     if (!arr.length) return;
@@ -364,10 +446,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     busyRef.current = true;
     try {
       const online = stateRef.current.presence;
-      const recent = stateRef.current.convos.class.slice(-8).map(m => `${m.sender || "Du"}: ${m.text}`).join("\n");
+      const recent = (stateRef.current.convos.class ?? []).slice(-8).map(m => `${m.sender || "Du"}: ${m.text}`).join("\n");
       const raw = await gemini(key, [{
         role: "user",
-        text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
+        text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${crossMemory("class")}${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
       }], undefined, 120 + count * 45);
       pushGroup(parseArr<{name:string;text:string;type?:string;imageDesc?:string;duration?:string}>(raw).slice(0, count));
     } catch { /* silent background failure */ }
@@ -377,17 +459,19 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   async function soloChatter(cid: CID, count: number) {
     if (!key || count <= 0 || cid === "class") return;
     try {
-      const history = stateRef.current.convos[cid].slice(-8).map(m => `${m.role === "user" ? "Du" : CONTACTS.find(c=>c.id===cid)?.name}: ${m.text}`).join("\n");
+      const who = CONTACTS.find(c=>c.id===cid)?.name ?? cid;
+      const history = (stateRef.current.convos[cid] ?? []).slice(-8).map(m => `${m.role === "user" ? "Du" : who}: ${m.text}`).join("\n");
       const raw = await gemini(key, [{
         role: "user",
-        text: `Recent chat:\n${history || "(tom chatt)"}\nWrite exactly ${count} short new messages you send on your own while the player is away (double-texting). Swedish, very short. Return ONLY a JSON array of strings: ["hallå?","svara typ"]`,
-      }], PERSONAS[cid], 100);
+        text: `Recent chat:\n${history || "(tom chatt)"}\n${crossMemory(cid)}Write exactly ${count} short new messages you send on your own while the player is away (double-texting). Swedish, very short. Return ONLY a JSON array of strings: ["hallå?","svara typ"]`,
+      }], personaFor(who), 100);
       const arr = parseArr<string>(raw).slice(0, count).filter(t => typeof t === "string" && t.trim());
       if (!arr.length) return;
-      setConvos(c => ({ ...c, [cid]: [...c[cid], ...arr.map(t => ({ id: nid(), time: ts(), role: "contact" as const, text: t.trim(), type: "text" as const }))] }));
-      if (stateRef.current.active !== cid) setUnread(u => ({ ...u, [cid]: u[cid] + arr.length }));
+      setConvos(c => ({ ...c, [cid]: [...(c[cid] ?? []), ...arr.map(t => ({ id: nid(), time: ts(), role: "contact" as const, text: t.trim(), type: "text" as const }))] }));
+      if (stateRef.current.active !== cid) setUnread(u => ({ ...u, [cid]: (u[cid] ?? 0) + arr.length }));
     } catch { /* silent */ }
   }
+
 
   // Catch up on everything that happened while the player was in another mode.
   useEffect(() => {
@@ -398,7 +482,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setPresence(p => driftPresence(p));
     const n = Math.min(MAX_OFFLINE_GROUP, Math.max(1, Math.round(mins / 2)));
     void groupChatter(n, `The player has been offline for about ${Math.round(mins)} minutes — this is everything they missed.`);
-    for (const cid of pickN(["johnny","jacob","sam"] as CID[], Math.random() < 0.5 ? rnd(1,2) : 0)) {
+    for (const cid of pickN(dmIds, Math.random() < 0.5 ? rnd(1,2) : 0)) {
       void soloChatter(cid, rnd(1, MAX_OFFLINE_SOLO));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -410,10 +494,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     const i = setInterval(() => {
       if (stateRef.current.calling || stateRef.current.typing || busyRef.current) return;
       setPresence(p => (Math.random() < 0.5 ? driftPresence(p) : p));
-      if (stateRef.current.convos.class.length && Math.random() < 0.55) {
+      if ((stateRef.current.convos.class ?? []).length && Math.random() < 0.55) {
         void groupChatter(rnd(1, 3), "Continue the conversation naturally right now.");
       } else if (Math.random() < 0.15) {
-        void soloChatter(pickN(["johnny","jacob","sam"] as CID[], 1)[0], 1);
+        void soloChatter(pickN(dmIds, 1)[0], 1);
       }
     }, 45000);
     return () => clearInterval(i);
@@ -424,7 +508,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   async function openChat(id: CID) {
     setActive(id); setErr("");
     setUnread(u=>({...u,[id]:0}));
-    if (convos[id].length > 0) return;
+    if ((convos[id] ?? []).length > 0) return;
     setTyping(true);
     try {
       if (id === "class") {
@@ -435,15 +519,17 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
         arr.forEach(m => add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration}));
       } else {
+        const who = CONTACTS.find(c=>c.id===id)?.name ?? id;
         const reply = await gemini(key,
-          [{role:"user", text:"Send me one casual opening text like you just randomly texted out of nowhere. One short sentence only. No quotation marks."}],
-          PERSONAS[id], 60
+          [{role:"user", text:`${crossMemory(id)}The user just added/opened a private DM with you. Send one casual opening text — if you two just talked in the class group, refer to it naturally. One short sentence only. No quotation marks.`}],
+          personaFor(who), 60
         );
         add(id, {role:"contact", text:reply.trim(), type:"text"});
       }
     } catch(e) { setErr(e instanceof Error ? e.message : "Fel"); }
     setTyping(false);
   }
+
 
   function kindOf(mime: string): "image"|"audio"|"file" {
     if (mime.startsWith("image/")) return "image";
@@ -507,10 +593,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       : "";
     try {
       if (active === "class") {
-        const recent = convos.class.slice(-8).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
+        const recent = (convos.class ?? []).slice(-8).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
         const mentioned = CLASS_NAMES.filter(n=>new RegExp(`@${n}\\b`,"i").test(text));
         // People who were actually talking with you, from those currently online.
-        const talkers = [...new Set(convos.class.slice(-12).map(m=>m.sender).filter((n): n is string => !!n))];
+        const talkers = [...new Set((convos.class ?? []).slice(-12).map(m=>m.sender).filter((n): n is string => !!n))];
         const online = [...new Set([...presence, ...mentioned])];
         const pool = [...new Set([...mentioned, ...talkers.filter(n=>online.includes(n)), ...online])];
         const n = mentioned.length ? Math.min(pool.length, mentioned.length + (Math.random()<0.4?1:0)) : Math.min(pool.length, replyCount());
@@ -522,7 +608,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         const raw = await gemini(key, [{
           role: "user",
           files,
-          text: `Swedish class WhatsApp group. Online right now: ${online.join(", ")}. Recent messages:\n${recent}\nUser just sent: "${text}"${attNote}\nGenerate exactly ${n} short replies, only from these people and in this order: ${speakers.join(", ")}. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          text: `Swedish class WhatsApp group. Online right now: ${online.join(", ")}. Recent messages:\n${recent}\n${crossMemory("class")}User just sent: "${text}"${attNote}\nGenerate exactly ${n} short replies, only from these people and in this order: ${speakers.join(", ")}. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw).slice(0, n);
         for (const m of arr) {
@@ -530,12 +616,13 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
           add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration});
         }
       } else {
-        const history: GeminiTurn[] = convos[active].slice(-10).map(m=>({
+        const who = CONTACTS.find(c=>c.id===active)?.name ?? active;
+        const history: GeminiTurn[] = (convos[active] ?? []).slice(-10).map(m=>({
           role: m.role==="user" ? "user" : "model" as "user"|"model",
           text: m.text,
         }));
         history.push({role:"user", text: text + attNote, files});
-        const reply = await gemini(key, history, PERSONAS[active], 100);
+        const reply = await gemini(key, history, personaFor(who) + crossMemory(active), 100);
         add(active, {role:"contact", text:reply.trim(), type:"text"});
       }
     } catch(e) { setErr(e instanceof Error ? e.message : "Fel"); }
@@ -545,10 +632,13 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const contact = CONTACTS.find(c=>c.id===active);
 
   const callMemory = calling
-    ? convos[calling].slice(-14)
-        .map(m => `${m.role === "user" ? "Du" : (m.sender || callContact?.name || "")}: ${m.type === "image" ? `[bild: ${m.imageDesc || ""}]` : m.text}`)
-        .join("\n")
+    ? [
+        ...(convos[calling] ?? []).slice(-14)
+          .map(m => `${m.role === "user" ? "Du" : (m.sender || callContact?.name || "")}: ${m.type === "image" ? `[bild: ${m.imageDesc || ""}]` : m.text}`),
+        crossMemory(calling),
+      ].join("\n")
     : "";
+
 
   function endCall(transcript: { name: string; text: string }[]) {
     const cid = calling;
@@ -559,7 +649,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setConvos(c => ({
       ...c,
       [cid]: [
-        ...c[cid],
+        ...(c[cid] ?? []),
         ...transcript.map(l => ({
           id: nid(),
           time: ts(),
@@ -575,7 +665,8 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const overlay = calling && callContact ? (
     <CallOverlay
       contact={{name:callContact.name, initials:callContact.initials, color:callContact.color}}
-      persona={PERSONAS[calling] ?? ""}
+      persona={callContact.isGroup ? "" : personaFor(callContact.name)}
+
       apiKey={key}
       memory={callMemory}
       group={calling === "class" ? { chars: CLASS_CHARS, names: CLASS_NAMES } : undefined}
@@ -603,12 +694,13 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       {!key && <p className="font-pixel text-[9px] text-destructive px-1">Ange Gemini API-nyckel i Klassrumsläget först.</p>}
       <div className="pixel-panel rounded-sm bg-card overflow-hidden">
         {CONTACTS.map((c,i)=>{
-          const last = convos[c.id as CID].at(-1);
+          const last = (convos[c.id] ?? []).at(-1);
           const preview = last ? (last.type==="image"?"📷 Bild":last.type==="audio"?"🎤 Röstmeddelande":last.text) : null;
+          const isExtra = added.includes(c.name);
           return (
             <div key={c.id}
               className={`w-full flex items-center gap-1 ${i<CONTACTS.length-1?"border-b-2 border-border":""} ${!key?"opacity-50":""}`}>
-              <button type="button" onClick={()=>key&&openChat(c.id as CID)}
+              <button type="button" onClick={()=>key&&openChat(c.id)}
                 className={`flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary/30 active:bg-secondary/50 transition-colors ${!key?"cursor-not-allowed":""}`}>
                 <div className="w-11 h-11 border-2 border-border flex items-center justify-center font-pixel text-[9px] text-white shrink-0"
                   style={{background:c.color}}>{c.initials}</div>
@@ -619,29 +711,35 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-muted-foreground truncate">{preview ?? c.sub}</p>
-                    {unread[c.id as CID]>0 && (
-                      <span className="font-pixel text-[7px] text-white bg-primary w-4 h-4 flex items-center justify-center shrink-0">{unread[c.id as CID]}</span>
+                    {(unread[c.id] ?? 0)>0 && (
+                      <span className="font-pixel text-[7px] text-white bg-primary w-4 h-4 flex items-center justify-center shrink-0">{unread[c.id]}</span>
                     )}
                   </div>
                 </div>
               </button>
+              {isExtra && (
+                <button type="button" aria-label={`Ta bort ${c.name}`} onClick={()=>removeContact(c.name)}
+                  className="h-9 w-9 shrink-0 border-2 border-border bg-destructive/10 font-pixel text-[9px] text-destructive shadow-pixel-sm active:translate-y-0.5 active:shadow-none">✕</button>
+              )}
               <button type="button" aria-label={`Ring ${c.name}`} disabled={!key}
-                onClick={()=>key&&setCalling(c.id as CID)}
-                className="mr-3 h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
-                {(c as {isGroup?:boolean}).isGroup ? "👥" : "📞"}
+                onClick={()=>key&&setCalling(c.id)}
+                className="mr-3 ml-1 h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+                {c.isGroup ? "👥" : "📞"}
               </button>
 
             </div>
           );
 
         })}
+
       </div>
     </div>
   );
 
   // ── Chat ────────────────────────────────────────────────────────────────────
 
-  const isGroup = !!(contact as {isGroup?:boolean}).isGroup;
+  const isGroup = !!contact?.isGroup;
+  const addable = CLASS_NAMES.filter(n => !CONTACTS.some(c => c.id === cidOf(n)));
 
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
@@ -656,6 +754,12 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
             {typing ? "skriver..." : contact!.sub}
           </p>
         </div>
+        {isGroup && (
+          <button type="button" aria-label="Lägg till kontakt" onClick={()=>setShowAdd(s=>!s)}
+            className="h-9 w-9 shrink-0 border-2 border-border bg-card font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none">
+            ➕
+          </button>
+        )}
         <button type="button" aria-label={`Ring ${contact!.name}`} disabled={!key}
           onClick={()=>setCalling(active)}
           className="h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
@@ -664,14 +768,30 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
 
       </div>
 
+      {isGroup && showAdd && (
+        <div className="mb-3 shrink-0 border-2 border-border bg-card p-2">
+          <p className="mb-1 font-pixel text-[8px] text-muted-foreground">Lägg till som kontakt (privat chatt):</p>
+          <div className="flex flex-wrap gap-1">
+            {addable.length === 0 && <p className="font-pixel text-[8px]">Alla är redan tillagda.</p>}
+            {addable.map(n => (
+              <button key={n} type="button" onClick={()=>addContact(n)}
+                className="border-2 border-border bg-secondary/40 px-2 py-1 font-pixel text-[8px] active:translate-y-0.5">+ {n}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+
+
 
       {err && <p className="font-pixel text-[8px] text-destructive mb-2 px-1">✗ {err}</p>}
 
       <div className="flex-1 overflow-y-auto px-2 py-2 border-2 border-border bg-secondary/20 mb-3">
-        {convos[active!].length===0 && !typing && (
+        {(convos[active!] ?? []).length===0 && !typing && (
           <p className="font-pixel text-[8px] text-muted-foreground text-center py-4">Laddar konversation…</p>
         )}
-        {convos[active!].map(msg=><Bubble key={msg.id} msg={msg} isGroup={isGroup}/>)}
+        {(convos[active!] ?? []).map(msg=><Bubble key={msg.id} msg={msg} isGroup={isGroup}/>)}
+
         {typing && (
           <div className="flex justify-start mb-2">
             {isGroup && <div className="w-6 h-6 border-2 border-border bg-secondary mr-1 shrink-0"/>}
