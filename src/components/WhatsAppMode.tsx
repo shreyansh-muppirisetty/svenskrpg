@@ -593,10 +593,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       : "";
     try {
       if (active === "class") {
-        const recent = convos.class.slice(-8).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
+        const recent = (convos.class ?? []).slice(-8).map(m=>`${m.sender||"Du"}: ${m.text}`).join("\n");
         const mentioned = CLASS_NAMES.filter(n=>new RegExp(`@${n}\\b`,"i").test(text));
         // People who were actually talking with you, from those currently online.
-        const talkers = [...new Set(convos.class.slice(-12).map(m=>m.sender).filter((n): n is string => !!n))];
+        const talkers = [...new Set((convos.class ?? []).slice(-12).map(m=>m.sender).filter((n): n is string => !!n))];
         const online = [...new Set([...presence, ...mentioned])];
         const pool = [...new Set([...mentioned, ...talkers.filter(n=>online.includes(n)), ...online])];
         const n = mentioned.length ? Math.min(pool.length, mentioned.length + (Math.random()<0.4?1:0)) : Math.min(pool.length, replyCount());
@@ -608,7 +608,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         const raw = await gemini(key, [{
           role: "user",
           files,
-          text: `Swedish class WhatsApp group. Online right now: ${online.join(", ")}. Recent messages:\n${recent}\nUser just sent: "${text}"${attNote}\nGenerate exactly ${n} short replies, only from these people and in this order: ${speakers.join(", ")}. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          text: `Swedish class WhatsApp group. Online right now: ${online.join(", ")}. Recent messages:\n${recent}\n${crossMemory("class")}User just sent: "${text}"${attNote}\nGenerate exactly ${n} short replies, only from these people and in this order: ${speakers.join(", ")}. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
         const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw).slice(0, n);
         for (const m of arr) {
@@ -616,12 +616,13 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
           add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration});
         }
       } else {
-        const history: GeminiTurn[] = convos[active].slice(-10).map(m=>({
+        const who = CONTACTS.find(c=>c.id===active)?.name ?? active;
+        const history: GeminiTurn[] = (convos[active] ?? []).slice(-10).map(m=>({
           role: m.role==="user" ? "user" : "model" as "user"|"model",
           text: m.text,
         }));
         history.push({role:"user", text: text + attNote, files});
-        const reply = await gemini(key, history, PERSONAS[active], 100);
+        const reply = await gemini(key, history, personaFor(who) + crossMemory(active), 100);
         add(active, {role:"contact", text:reply.trim(), type:"text"});
       }
     } catch(e) { setErr(e instanceof Error ? e.message : "Fel"); }
@@ -631,10 +632,13 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const contact = CONTACTS.find(c=>c.id===active);
 
   const callMemory = calling
-    ? convos[calling].slice(-14)
-        .map(m => `${m.role === "user" ? "Du" : (m.sender || callContact?.name || "")}: ${m.type === "image" ? `[bild: ${m.imageDesc || ""}]` : m.text}`)
-        .join("\n")
+    ? [
+        ...(convos[calling] ?? []).slice(-14)
+          .map(m => `${m.role === "user" ? "Du" : (m.sender || callContact?.name || "")}: ${m.type === "image" ? `[bild: ${m.imageDesc || ""}]` : m.text}`),
+        crossMemory(calling),
+      ].join("\n")
     : "";
+
 
   function endCall(transcript: { name: string; text: string }[]) {
     const cid = calling;
