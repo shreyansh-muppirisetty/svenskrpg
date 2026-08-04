@@ -422,8 +422,9 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const busyRef = useRef(false);
 
   useEffect(() => {
-    try { localStorage.setItem(STORE, JSON.stringify({ convos, presence, left: Date.now() })); } catch { /* ignore */ }
-  }, [convos, presence]);
+    try { localStorage.setItem(STORE, JSON.stringify({ convos, presence, added, left: Date.now() })); } catch { /* ignore */ }
+  }, [convos, presence, added]);
+
 
   function pushGroup(arr: {name:string;text:string;type?:string;imageDesc?:string;duration?:string}[]) {
     if (!arr.length) return;
