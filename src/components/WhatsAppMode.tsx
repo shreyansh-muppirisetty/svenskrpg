@@ -308,7 +308,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const key = loadKey();
   const [active, setActive] = useState<CID|null>(null);
   const [calling, setCalling] = useState<CID|null>(null);
-  const saved = useRef<{convos?:Record<CID,Msg[]>; presence?:string[]; left?:number} | null>(null);
+  const saved = useRef<{convos?:Record<CID,Msg[]>; presence?:string[]; left?:number; added?:string[]} | null>(null);
   if (saved.current === null) {
     try { saved.current = JSON.parse(localStorage.getItem(STORE) || "null") ?? {}; } catch { saved.current = {}; }
     const all = Object.values(saved.current?.convos ?? {}).flat() as Msg[];
@@ -317,6 +317,9 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const [convos, setConvos] = useState<Record<CID,Msg[]>>(
     saved.current?.convos ?? {johnny:[],jacob:[],sam:[],class:[]}
   );
+  /** Classmates the player added from the group chat as private contacts. */
+  const [added, setAdded] = useState<string[]>(saved.current?.added ?? []);
+  const [showAdd, setShowAdd] = useState(false);
   const [presence, setPresence] = useState<string[]>(
     saved.current?.presence?.length ? saved.current.presence : pickN(CLASS_NAMES, rnd(4,7))
   );
@@ -329,7 +332,16 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const [err, setErr] = useState("");
   const [unread, setUnread] = useState<Record<CID,number>>({johnny:2,jacob:1,sam:0,class:5});
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const CONTACTS: Contact[] = useMemo(() => {
+    const extra = added
+      .filter(n => !BASE_CONTACTS.some(c => c.id === cidOf(n)))
+      .map(n => ({ id: cidOf(n), name: n, initials: initialsOf(n), color: nameColor(n), sub: "från Klass 8B" }));
+    return [...BASE_CONTACTS, ...extra];
+  }, [added]);
+
   const callContact = CONTACTS.find(c=>c.id===calling);
+
 
   const mentionQuery = useMemo(()=>{
     const m = /@([\p{L}]*)$/u.exec(input);
