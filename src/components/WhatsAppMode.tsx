@@ -360,16 +360,60 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); },[convos,active,typing]);
 
   function add(cid: CID, msg: Omit<Msg,"id"|"time">) {
-    setConvos(c=>({...c,[cid]:[...c[cid],{...msg,id:nid(),time:ts()}]}));
+    setConvos(c=>({...c,[cid]:[...(c[cid] ?? []),{...msg,id:nid(),time:ts()}]}));
+  }
+
+  /** Add a classmate from the group chat as a private contact. */
+  function addContact(name: string) {
+    const id = cidOf(name);
+    setAdded(a => (a.includes(name) ? a : [...a, name]));
+    setConvos(c => (c[id] ? c : { ...c, [id]: [] }));
+    setUnread(u => ({ ...u, [id]: u[id] ?? 0 }));
+    setShowAdd(false);
+    setActive(id);
+  }
+
+  function removeContact(name: string) {
+    const id = cidOf(name);
+    setAdded(a => a.filter(n => n !== name));
+    if (active === id) setActive(null);
+  }
+
+  /** What this person knows from every other chat — so they aren't amnesiac. */
+  function crossMemory(cid: CID): string {
+    const c = stateRef.current?.convos ?? convos;
+    const name = CONTACTS.find(x => x.id === cid)?.name ?? "";
+    const bits: string[] = [];
+    if (cid !== "class") {
+      const inGroup = (c.class ?? [])
+        .slice(-40)
+        .filter(m => m.sender === name || (m.role === "user" && new RegExp(`@?${name}`, "i").test(m.text)))
+        .slice(-8)
+        .map(m => `${m.sender || "Du"}: ${m.text}`);
+      if (inGroup.length) bits.push(`From the class group chat (you remember all of this):\n${inGroup.join("\n")}`);
+    } else {
+      const dms = Object.entries(c)
+        .filter(([id]) => id !== "class")
+        .map(([id, msgs]) => {
+          const who = CONTACTS.find(x => x.id === id)?.name ?? id;
+          const last = (msgs ?? []).slice(-4).map(m => `${m.role === "user" ? "Du" : who}: ${m.text}`);
+          return last.length ? `Private DM between the user and ${who}:\n${last.join("\n")}` : "";
+        })
+        .filter(Boolean);
+      if (dms.length) bits.push(`People also remember their private DMs with the user:\n${dms.join("\n")}`);
+    }
+    return bits.length ? `\n${bits.join("\n\n")}\n` : "";
   }
 
   function clearAll() {
     setConvos({johnny:[],jacob:[],sam:[],class:[]});
     setUnread({johnny:0,jacob:0,sam:0,class:0});
+    setAdded([]);
     setPresence(pickN(CLASS_NAMES, rnd(4,7)));
     try { localStorage.removeItem(STORE); } catch { /* ignore */ }
     setActive(null);
   }
+
 
   // ── Living chat: presence drift, background chatter and offline catch-up ────
 
