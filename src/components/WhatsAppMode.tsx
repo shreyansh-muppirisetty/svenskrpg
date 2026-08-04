@@ -66,6 +66,26 @@ const CLASS_CHARS = `Alex: quiet, rarely texts, strict parents, soft-hearted; Hu
 
 const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella","Noah","Lucas","William","Oscar","Leo","Filip","Elias","Isak","Nils","Maja","Olivia","Sofia","Klara"];
 
+/** Personality blurb for one classmate, taken from the class character sheet. */
+const TRAITS: Record<string,string> = Object.fromEntries(
+  CLASS_CHARS.split(";").map(part => {
+    const i = part.indexOf(":");
+    return [part.slice(0, i).trim(), part.slice(i + 1).trim()];
+  }),
+);
+
+const cidOf = (name: string) => name.toLowerCase();
+
+/** Persona used when a classmate is added as a private contact. */
+function personaFor(name: string): string {
+  if (PERSONAS[cidOf(name)]) return PERSONAS[cidOf(name)];
+  return `You are ${name}, a 15yo Swedish student in class 8B. Your personality: ${TRAITS[name] ?? "an ordinary classmate"}. This is a private 1-on-1 WhatsApp DM with the user (a classmate). Reply in Swedish, 1-2 very short teen messages, mixing in English slang naturally, staying completely in character.`;
+}
+
+const initialsOf = (name: string) => name.slice(0, 2).toUpperCase();
+
+
+
 // ── Presence / offline simulation helpers ────────────────────────────────────
 
 const STORE = "svenska-quest-whatsapp-state";
