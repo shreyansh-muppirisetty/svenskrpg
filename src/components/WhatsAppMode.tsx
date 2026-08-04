@@ -649,7 +649,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setConvos(c => ({
       ...c,
       [cid]: [
-        ...c[cid],
+        ...(c[cid] ?? []),
         ...transcript.map(l => ({
           id: nid(),
           time: ts(),
@@ -665,7 +665,8 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const overlay = calling && callContact ? (
     <CallOverlay
       contact={{name:callContact.name, initials:callContact.initials, color:callContact.color}}
-      persona={PERSONAS[calling] ?? ""}
+      persona={callContact.isGroup ? "" : personaFor(callContact.name)}
+
       apiKey={key}
       memory={callMemory}
       group={calling === "class" ? { chars: CLASS_CHARS, names: CLASS_NAMES } : undefined}
