@@ -340,7 +340,9 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     return [...BASE_CONTACTS, ...extra];
   }, [added]);
 
+  const dmIds: CID[] = CONTACTS.filter(c => !c.isGroup).map(c => c.id);
   const callContact = CONTACTS.find(c=>c.id===calling);
+
 
 
   const mentionQuery = useMemo(()=>{
