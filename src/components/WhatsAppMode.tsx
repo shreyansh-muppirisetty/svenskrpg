@@ -694,12 +694,13 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
       {!key && <p className="font-pixel text-[9px] text-destructive px-1">Ange Gemini API-nyckel i Klassrumsläget först.</p>}
       <div className="pixel-panel rounded-sm bg-card overflow-hidden">
         {CONTACTS.map((c,i)=>{
-          const last = convos[c.id as CID].at(-1);
+          const last = (convos[c.id] ?? []).at(-1);
           const preview = last ? (last.type==="image"?"📷 Bild":last.type==="audio"?"🎤 Röstmeddelande":last.text) : null;
+          const isExtra = added.includes(c.name);
           return (
             <div key={c.id}
               className={`w-full flex items-center gap-1 ${i<CONTACTS.length-1?"border-b-2 border-border":""} ${!key?"opacity-50":""}`}>
-              <button type="button" onClick={()=>key&&openChat(c.id as CID)}
+              <button type="button" onClick={()=>key&&openChat(c.id)}
                 className={`flex-1 min-w-0 flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary/30 active:bg-secondary/50 transition-colors ${!key?"cursor-not-allowed":""}`}>
                 <div className="w-11 h-11 border-2 border-border flex items-center justify-center font-pixel text-[9px] text-white shrink-0"
                   style={{background:c.color}}>{c.initials}</div>
@@ -710,22 +711,27 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-muted-foreground truncate">{preview ?? c.sub}</p>
-                    {unread[c.id as CID]>0 && (
-                      <span className="font-pixel text-[7px] text-white bg-primary w-4 h-4 flex items-center justify-center shrink-0">{unread[c.id as CID]}</span>
+                    {(unread[c.id] ?? 0)>0 && (
+                      <span className="font-pixel text-[7px] text-white bg-primary w-4 h-4 flex items-center justify-center shrink-0">{unread[c.id]}</span>
                     )}
                   </div>
                 </div>
               </button>
+              {isExtra && (
+                <button type="button" aria-label={`Ta bort ${c.name}`} onClick={()=>removeContact(c.name)}
+                  className="h-9 w-9 shrink-0 border-2 border-border bg-destructive/10 font-pixel text-[9px] text-destructive shadow-pixel-sm active:translate-y-0.5 active:shadow-none">✕</button>
+              )}
               <button type="button" aria-label={`Ring ${c.name}`} disabled={!key}
-                onClick={()=>key&&setCalling(c.id as CID)}
-                className="mr-3 h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
-                {(c as {isGroup?:boolean}).isGroup ? "👥" : "📞"}
+                onClick={()=>key&&setCalling(c.id)}
+                className="mr-3 ml-1 h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
+                {c.isGroup ? "👥" : "📞"}
               </button>
 
             </div>
           );
 
         })}
+
       </div>
     </div>
   );
