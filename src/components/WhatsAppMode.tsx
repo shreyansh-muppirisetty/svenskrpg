@@ -738,7 +738,8 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
 
   // ── Chat ────────────────────────────────────────────────────────────────────
 
-  const isGroup = !!(contact as {isGroup?:boolean}).isGroup;
+  const isGroup = !!contact?.isGroup;
+  const addable = CLASS_NAMES.filter(n => !CONTACTS.some(c => c.id === cidOf(n)));
 
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
@@ -753,6 +754,12 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
             {typing ? "skriver..." : contact!.sub}
           </p>
         </div>
+        {isGroup && (
+          <button type="button" aria-label="Lägg till kontakt" onClick={()=>setShowAdd(s=>!s)}
+            className="h-9 w-9 shrink-0 border-2 border-border bg-card font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none">
+            ➕
+          </button>
+        )}
         <button type="button" aria-label={`Ring ${contact!.name}`} disabled={!key}
           onClick={()=>setCalling(active)}
           className="h-9 w-9 shrink-0 border-2 border-border bg-accent font-pixel text-[10px] shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40">
@@ -760,6 +767,21 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         </button>
 
       </div>
+
+      {isGroup && showAdd && (
+        <div className="mb-3 shrink-0 border-2 border-border bg-card p-2">
+          <p className="mb-1 font-pixel text-[8px] text-muted-foreground">Lägg till som kontakt (privat chatt):</p>
+          <div className="flex flex-wrap gap-1">
+            {addable.length === 0 && <p className="font-pixel text-[8px]">Alla är redan tillagda.</p>}
+            {addable.map(n => (
+              <button key={n} type="button" onClick={()=>addContact(n)}
+                className="border-2 border-border bg-secondary/40 px-2 py-1 font-pixel text-[8px] active:translate-y-0.5">+ {n}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+
 
 
       {err && <p className="font-pixel text-[8px] text-destructive mb-2 px-1">✗ {err}</p>}
