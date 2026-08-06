@@ -130,6 +130,8 @@ interface Msg {
   sender?: string; imageDesc?: string; duration?: string;
   /** Attachment the player sent (data URL) */
   dataUrl?: string; mime?: string; fileName?: string;
+  /** Kept in history for AI memory but never rendered in the chat (e.g. call transcripts). */
+  hidden?: boolean;
 }
 
 let _id = 0;
