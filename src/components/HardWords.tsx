@@ -43,21 +43,27 @@ function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 
 
 function buildQuiz(words: HardWord[]): QuizQuestion[] {
   return shuffle(words).map(w => {
+    const correct = shortMeaning(w.meaning);
     const distractors = shuffle(words.filter(x => x.id !== w.id))
-      .slice(0, 3)
-      .map(x => shortMeaning(x.meaning));
-    const correctIdx = Math.floor(Math.random() * 4);
+      .map(x => shortMeaning(x.meaning))
+      .filter((m, i, a) => m !== correct && a.indexOf(m) === i)
+      .slice(0, 3);
+    const correctIdx = Math.floor(Math.random() * (distractors.length + 1));
     const options = [...distractors];
-    options.splice(correctIdx, 0, shortMeaning(w.meaning));
+    options.splice(correctIdx, 0, correct);
     return { word: w, options, correctIdx };
   });
 }
 
 function buildMatch(words: HardWord[]): MatchState {
-  const batch = shuffle(words).slice(0, 4);
+  const seen = new Set<string>();
+  const batch = shuffle(words)
+    .filter(w => { const m = shortMeaning(w.meaning); if (seen.has(m)) return false; seen.add(m); return true; })
+    .slice(0, 4);
   const pairs: MatchPair[] = batch.map(w => ({ id: w.id, word: w.word, meaning: shortMeaning(w.meaning) }));
   return { pairs, rightOrder: shuffle(pairs), selectedLeft: null, matched: [], wrong: [], attempts: 0, correct: 0 };
 }
+
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
