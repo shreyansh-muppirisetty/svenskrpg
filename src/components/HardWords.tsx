@@ -60,6 +60,20 @@ function buildBatch(words: HardWord[], usedIds: string[], size = 4): MatchPair[]
   return unique.slice(0, size).map(w => ({ id: w.id, word: w.word, meaning: shortMeaning(w.meaning) }));
 }
 
+function buildQuiz(words: HardWord[]): QuizQuestion[] {
+  return shuffle(words).map(w => {
+    const correct = shortMeaning(w.meaning);
+    const distractors = shuffle(words.filter(x => x.id !== w.id))
+      .map(x => shortMeaning(x.meaning))
+      .filter((m, i, a) => m !== correct && a.indexOf(m) === i)
+      .slice(0, 3);
+    const correctIdx = Math.floor(Math.random() * (distractors.length + 1));
+    const options = [...distractors];
+    options.splice(correctIdx, 0, correct);
+    return { word: w, options, correctIdx };
+  });
+}
+
 function buildMatch(words: HardWord[], usedIds: string[] = [], attempts = 0, correct = 0, round = 1): MatchState {
   const pairs = buildBatch(words, usedIds, 4);
   return { allWords: words, usedIds, pairs, rightOrder: shuffle(pairs), selectedLeft: null, matched: [], wrong: [], attempts, correct, round };
