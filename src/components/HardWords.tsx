@@ -429,7 +429,17 @@ function MatchScreen({ state, onChange, onRematch, onBack }: {
   onRematch: () => void;
   onBack: () => void;
 }) {
-  const allMatched = state.matched.length === state.pairs.length;
+  const allMatched = state.matched.length === state.pairs.length && state.pairs.length > 0;
+  const done = isDone(state);
+  const totalMatched = totalUsed(state);
+  const total = totalWords(state);
+
+  // Auto-advance when the current round is cleared and leftover words remain
+  useEffect(() => {
+    if (!allMatched || done) return;
+    const timer = setTimeout(() => onChange(nextRound(state)), 350);
+    return () => clearTimeout(timer);
+  }, [allMatched, done, state, onChange]);
 
   function clickLeft(id: string) {
     if (state.matched.includes(id) || state.wrong.includes(id)) return;
@@ -465,24 +475,25 @@ function MatchScreen({ state, onChange, onRematch, onBack }: {
       {/* Score bar */}
       <div className="pixel-panel rounded-sm bg-card p-3 flex justify-between items-center">
         <span className="font-pixel text-[9px] text-muted-foreground">
-          {state.matched.length} / {state.pairs.length} par matchade
+          ROND {state.round} · {totalMatched} / {total} ord
         </span>
         {state.attempts > 0 && (
           <span className="font-pixel text-[9px] text-muted-foreground">{accuracy}% träff</span>
         )}
       </div>
 
-      {allMatched ? (
+      {done ? (
         <div className="pixel-panel rounded-sm bg-card p-8 flex flex-col items-center gap-4 text-center">
-          <p className="font-pixel text-[9px] text-muted-foreground">OMGÅNG KLAR</p>
+          <p className="font-pixel text-[9px] text-muted-foreground">MATCH KLAR</p>
           <div className={`text-6xl font-bold ${accuracy >= 80 ? "text-emerald-600" : accuracy >= 60 ? "text-yellow-600" : "text-red-500"}`}>
             {accuracy}%
           </div>
           <p className="text-muted-foreground">{state.correct} rätt av {state.attempts} försök</p>
+          <p className="font-pixel text-[8px] text-muted-foreground">{total} ord genomgångna</p>
           <div className="flex gap-2 mt-2">
             <button onClick={onRematch}
               className="rounded-sm border-2 border-border bg-accent px-5 py-2.5 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm">
-              NY OMGÅNG
+              NY MATCH
             </button>
             <button onClick={onBack}
               className="rounded-sm border-2 border-border bg-card px-5 py-2.5 font-pixel text-[9px] shadow-pixel-sm">
