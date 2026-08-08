@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { loadHardWords, deleteHardWord, saveHardWord, shortMeaning, displayMeaning, buildDictPrompt, MODE_LABEL, type HardWord, type DictMode } from "@/lib/hardwords";
 
@@ -28,18 +28,37 @@ interface QuizState {
 
 interface MatchPair { id: string; word: string; meaning: string }
 interface MatchState {
-  pairs: MatchPair[];           // left column (fixed order)
-  rightOrder: MatchPair[];      // right column (shuffled)
+  allWords: HardWord[];           // full pool
+  usedIds: string[];              // already matched across rounds
+  pairs: MatchPair[];             // current round (left column, fixed)
+  rightOrder: MatchPair[];        // current round (right column, shuffled)
   selectedLeft: string | null;
-  matched: string[];            // IDs of completed pairs
-  wrong: string[];              // IDs flashing red
-  attempts: number;
-  correct: number;
+  matched: string[];              // IDs matched in the current round
+  wrong: string[];                // IDs flashing red
+  attempts: number;               // total across all rounds
+  correct: number;                // total across all rounds
+  round: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 0.5); }
+
+function dedupMeanings(words: HardWord[]): HardWord[] {
+  const seen = new Set<string>();
+  return words.filter(w => {
+    const m = shortMeaning(w.meaning);
+    if (seen.has(m)) return false;
+    seen.add(m);
+    return true;
+  });
+}
+
+function buildBatch(words: HardWord[], usedIds: string[], size = 4): MatchPair[] {
+  const available = words.filter(w => !usedIds.includes(w.id));
+  const unique = dedupMeanings(available);
+  return unique.slice(0, size).map(w => ({ id: w.id, word: w.word, meaning: shortMeaning(w.meaning) }));
+}
 
 function buildQuiz(words: HardWord[]): QuizQuestion[] {
   return shuffle(words).map(w => {
@@ -55,13 +74,39 @@ function buildQuiz(words: HardWord[]): QuizQuestion[] {
   });
 }
 
-function buildMatch(words: HardWord[]): MatchState {
-  const seen = new Set<string>();
-  const batch = shuffle(words)
-    .filter(w => { const m = shortMeaning(w.meaning); if (seen.has(m)) return false; seen.add(m); return true; })
-    .slice(0, 4);
-  const pairs: MatchPair[] = batch.map(w => ({ id: w.id, word: w.word, meaning: shortMeaning(w.meaning) }));
-  return { pairs, rightOrder: shuffle(pairs), selectedLeft: null, matched: [], wrong: [], attempts: 0, correct: 0 };
+function buildMatch(words: HardWord[], usedIds: string[] = [], attempts = 0, correct = 0, round = 1): MatchState {
+  const pairs = buildBatch(words, usedIds, 4);
+  return { allWords: words, usedIds, pairs, rightOrder: shuffle(pairs), selectedLeft: null, matched: [], wrong: [], attempts, correct, round };
+}
+
+function nextRound(state: MatchState): MatchState {
+  const newlyUsed = [...state.usedIds, ...state.matched];
+  const pairs = buildBatch(state.allWords, newlyUsed, 4);
+  if (pairs.length === 0) {
+    return { ...state, usedIds: newlyUsed, matched: [], wrong: [], selectedLeft: null };
+  }
+  return {
+    ...state,
+    usedIds: newlyUsed,
+    pairs,
+    rightOrder: shuffle(pairs),
+    selectedLeft: null,
+    matched: [],
+    wrong: [],
+    round: state.round + 1,
+  };
+}
+
+function totalUsed(state: MatchState) {
+  return state.usedIds.length + state.matched.length;
+}
+
+function totalWords(state: MatchState) {
+  return state.allWords.length;
+}
+
+function isDone(state: MatchState) {
+  return state.pairs.length === 0 && totalUsed(state) >= totalWords(state);
 }
 
 
@@ -384,7 +429,17 @@ function MatchScreen({ state, onChange, onRematch, onBack }: {
   onRematch: () => void;
   onBack: () => void;
 }) {
-  const allMatched = state.matched.length === state.pairs.length;
+  const allMatched = state.matched.length === state.pairs.length && state.pairs.length > 0;
+  const done = isDone(state);
+  const totalMatched = totalUsed(state);
+  const total = totalWords(state);
+
+  // Auto-advance when the current round is cleared and leftover words remain
+  useEffect(() => {
+    if (!allMatched || done) return;
+    const timer = setTimeout(() => onChange(nextRound(state)), 350);
+    return () => clearTimeout(timer);
+  }, [allMatched, done, state, onChange]);
 
   function clickLeft(id: string) {
     if (state.matched.includes(id) || state.wrong.includes(id)) return;
@@ -420,24 +475,25 @@ function MatchScreen({ state, onChange, onRematch, onBack }: {
       {/* Score bar */}
       <div className="pixel-panel rounded-sm bg-card p-3 flex justify-between items-center">
         <span className="font-pixel text-[9px] text-muted-foreground">
-          {state.matched.length} / {state.pairs.length} par matchade
+          ROND {state.round} · {totalMatched} / {total} ord
         </span>
         {state.attempts > 0 && (
           <span className="font-pixel text-[9px] text-muted-foreground">{accuracy}% träff</span>
         )}
       </div>
 
-      {allMatched ? (
+      {done ? (
         <div className="pixel-panel rounded-sm bg-card p-8 flex flex-col items-center gap-4 text-center">
-          <p className="font-pixel text-[9px] text-muted-foreground">OMGÅNG KLAR</p>
+          <p className="font-pixel text-[9px] text-muted-foreground">MATCH KLAR</p>
           <div className={`text-6xl font-bold ${accuracy >= 80 ? "text-emerald-600" : accuracy >= 60 ? "text-yellow-600" : "text-red-500"}`}>
             {accuracy}%
           </div>
           <p className="text-muted-foreground">{state.correct} rätt av {state.attempts} försök</p>
+          <p className="font-pixel text-[8px] text-muted-foreground">{total} ord genomgångna</p>
           <div className="flex gap-2 mt-2">
             <button onClick={onRematch}
               className="rounded-sm border-2 border-border bg-accent px-5 py-2.5 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm">
-              NY OMGÅNG
+              NY MATCH
             </button>
             <button onClick={onBack}
               className="rounded-sm border-2 border-border bg-card px-5 py-2.5 font-pixel text-[9px] shadow-pixel-sm">
