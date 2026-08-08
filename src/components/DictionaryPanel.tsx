@@ -1,18 +1,10 @@
 import { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { saveHardWord, type DictMode } from "@/lib/hardwords";
+import { saveHardWord, buildDictPrompt, displayMeaning, type DictMode } from "@/lib/hardwords";
 
 const MODEL = "gemini-3.1-flash-lite";
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const noCorr = { spellCheck: false, autoCorrect: "off", autoCapitalize: "off", autoComplete: "off" } as const;
-
-function buildPrompt(q: string, mode: DictMode): string {
-  if (mode === "sv-sv")
-    return `Du är en svensk ordbok. Slå upp: "${q}". Ge: ORDKLASS, DEFINITION (på enkel svenska), BÖJNING (viktiga former), EXEMPEL (en mening), SYNONYMER (2-3). Kortfattad.`;
-  if (mode === "sv-en")
-    return `You are a Swedish-to-English school dictionary for Year 7/8 students. Translate the Swedish word or phrase: "${q}". Reply in English. Give: ENGLISH (translation), WORD CLASS, DEFINITION (simple English), EXAMPLE (one natural English sentence), SIMILAR WORDS (2-3 English synonyms).`;
-  return `Swedish dictionary. Translate English: "${q}". Give: SVENSKA (translation), ORDKLASS, DEFINITION (in simple Swedish), EXEMPEL (both languages), SYNONYMER. Answer in Swedish.`;
-}
 
 export function DictionaryPanel({ apiKey }: { apiKey: string }) {
   const [mode, setMode] = useState<DictMode>("sv-sv");
@@ -31,8 +23,8 @@ export function DictionaryPanel({ apiKey }: { apiKey: string }) {
       const res = await fetch(`${API_BASE}/${MODEL}:generateContent?key=${apiKey}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: buildPrompt(q, mode) }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
+          contents: [{ role: "user", parts: [{ text: buildDictPrompt(q, mode) }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 220 },
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -76,7 +68,7 @@ export function DictionaryPanel({ apiKey }: { apiKey: string }) {
             </span>
             {saved && <span className="font-pixel text-[8px] text-emerald-600 shrink-0">✓ sparat i svåra ord</span>}
           </div>
-          <ReactMarkdown>{result}</ReactMarkdown>
+          <ReactMarkdown>{displayMeaning(result)}</ReactMarkdown>
         </div>
       )}
     </div>
