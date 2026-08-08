@@ -28,40 +28,71 @@ interface QuizState {
 
 interface MatchPair { id: string; word: string; meaning: string }
 interface MatchState {
-  pairs: MatchPair[];           // left column (fixed order)
-  rightOrder: MatchPair[];      // right column (shuffled)
+  allWords: HardWord[];           // full pool
+  usedIds: string[];              // already matched across rounds
+  pairs: MatchPair[];             // current round (left column, fixed)
+  rightOrder: MatchPair[];        // current round (right column, shuffled)
   selectedLeft: string | null;
-  matched: string[];            // IDs of completed pairs
-  wrong: string[];              // IDs flashing red
-  attempts: number;
-  correct: number;
+  matched: string[];              // IDs matched in the current round
+  wrong: string[];                // IDs flashing red
+  attempts: number;               // total across all rounds
+  correct: number;                // total across all rounds
+  round: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 0.5); }
 
-function buildQuiz(words: HardWord[]): QuizQuestion[] {
-  return shuffle(words).map(w => {
-    const correct = shortMeaning(w.meaning);
-    const distractors = shuffle(words.filter(x => x.id !== w.id))
-      .map(x => shortMeaning(x.meaning))
-      .filter((m, i, a) => m !== correct && a.indexOf(m) === i)
-      .slice(0, 3);
-    const correctIdx = Math.floor(Math.random() * (distractors.length + 1));
-    const options = [...distractors];
-    options.splice(correctIdx, 0, correct);
-    return { word: w, options, correctIdx };
+function dedupMeanings(words: HardWord[]): HardWord[] {
+  const seen = new Set<string>();
+  return words.filter(w => {
+    const m = shortMeaning(w.meaning);
+    if (seen.has(m)) return false;
+    seen.add(m);
+    return true;
   });
 }
 
-function buildMatch(words: HardWord[]): MatchState {
-  const seen = new Set<string>();
-  const batch = shuffle(words)
-    .filter(w => { const m = shortMeaning(w.meaning); if (seen.has(m)) return false; seen.add(m); return true; })
-    .slice(0, 4);
-  const pairs: MatchPair[] = batch.map(w => ({ id: w.id, word: w.word, meaning: shortMeaning(w.meaning) }));
-  return { pairs, rightOrder: shuffle(pairs), selectedLeft: null, matched: [], wrong: [], attempts: 0, correct: 0 };
+function buildBatch(words: HardWord[], usedIds: string[], size = 4): MatchPair[] {
+  const available = words.filter(w => !usedIds.includes(w.id));
+  const unique = dedupMeanings(available);
+  return unique.slice(0, size).map(w => ({ id: w.id, word: w.word, meaning: shortMeaning(w.meaning) }));
+}
+
+function buildMatch(words: HardWord[], usedIds: string[] = [], attempts = 0, correct = 0, round = 1): MatchState {
+  const pairs = buildBatch(words, usedIds, 4);
+  return { allWords: words, usedIds, pairs, rightOrder: shuffle(pairs), selectedLeft: null, matched: [], wrong: [], attempts, correct, round };
+}
+
+function nextRound(state: MatchState): MatchState {
+  const newlyUsed = [...state.usedIds, ...state.matched];
+  const pairs = buildBatch(state.allWords, newlyUsed, 4);
+  if (pairs.length === 0) {
+    return { ...state, usedIds: newlyUsed, matched: [], wrong: [], selectedLeft: null };
+  }
+  return {
+    ...state,
+    usedIds: newlyUsed,
+    pairs,
+    rightOrder: shuffle(pairs),
+    selectedLeft: null,
+    matched: [],
+    wrong: [],
+    round: state.round + 1,
+  };
+}
+
+function totalUsed(state: MatchState) {
+  return state.usedIds.length + state.matched.length;
+}
+
+function totalWords(state: MatchState) {
+  return state.allWords.length;
+}
+
+function isDone(state: MatchState) {
+  return state.pairs.length === 0 && totalUsed(state) >= totalWords(state);
 }
 
 
