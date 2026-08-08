@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { loadHardWords, deleteHardWord, saveHardWord, shortMeaning, displayMeaning, buildDictPrompt, MODE_LABEL, type HardWord, type DictMode } from "@/lib/hardwords";
 
