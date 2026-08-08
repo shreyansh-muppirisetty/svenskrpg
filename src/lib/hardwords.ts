@@ -65,9 +65,9 @@ export function shortMeaning(full: string): string {
   return (words.length > 60 ? words.slice(0, 60).trim() : words) || "?";
 }
 
-// Full text minus the machine-readable GLOSS line, for display
+// Full text including the GLOSS line so users can memorize the definition
 export function displayMeaning(full: string): string {
-  return full.replace(/^\s*GLOSS\s*[:\-].*$/im, "").trim();
+  return full.trim();
 }
 
 export const MODE_LABEL: Record<DictMode, string> = {
