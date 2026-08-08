@@ -1,6 +1,6 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { loadHardWords, deleteHardWord, saveHardWord, shortMeaning, MODE_LABEL, type HardWord, type DictMode } from "@/lib/hardwords";
+import { loadHardWords, deleteHardWord, saveHardWord, shortMeaning, displayMeaning, buildDictPrompt, MODE_LABEL, type HardWord, type DictMode } from "@/lib/hardwords";
 
 const MODEL = "gemini-3.1-flash-lite";
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -8,12 +8,6 @@ const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const noCorr = { spellCheck: false, autoCorrect: "off", autoCapitalize: "off", autoComplete: "off" } as const;
 
 function loadKey() { try { return localStorage.getItem(KEY_STORE) ?? ""; } catch { return ""; } }
-
-function buildPrompt(q: string, mode: DictMode) {
-  if (mode === "sv-sv") return `Du är en svensk ordbok. Slå upp: "${q}". Ge: ORDKLASS, DEFINITION (på enkel svenska), BÖJNING, EXEMPEL (en mening), SYNONYMER (2-3). Kortfattad.`;
-  if (mode === "sv-en") return `Swedish-to-English dictionary. Translate: "${q}". Give: ENGLISH, WORD CLASS, DEFINITION, EXAMPLE, SIMILAR WORDS.`;
-  return `English-to-Swedish dictionary. Translate: "${q}". Give: SVENSKA, ORDKLASS, DEFINITION (simple Swedish), EXEMPEL, SYNONYMER.`;
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -49,21 +43,27 @@ function shuffle<T>(arr: T[]): T[] { return [...arr].sort(() => Math.random() - 
 
 function buildQuiz(words: HardWord[]): QuizQuestion[] {
   return shuffle(words).map(w => {
+    const correct = shortMeaning(w.meaning);
     const distractors = shuffle(words.filter(x => x.id !== w.id))
-      .slice(0, 3)
-      .map(x => shortMeaning(x.meaning));
-    const correctIdx = Math.floor(Math.random() * 4);
+      .map(x => shortMeaning(x.meaning))
+      .filter((m, i, a) => m !== correct && a.indexOf(m) === i)
+      .slice(0, 3);
+    const correctIdx = Math.floor(Math.random() * (distractors.length + 1));
     const options = [...distractors];
-    options.splice(correctIdx, 0, shortMeaning(w.meaning));
+    options.splice(correctIdx, 0, correct);
     return { word: w, options, correctIdx };
   });
 }
 
 function buildMatch(words: HardWord[]): MatchState {
-  const batch = shuffle(words).slice(0, 4);
+  const seen = new Set<string>();
+  const batch = shuffle(words)
+    .filter(w => { const m = shortMeaning(w.meaning); if (seen.has(m)) return false; seen.add(m); return true; })
+    .slice(0, 4);
   const pairs: MatchPair[] = batch.map(w => ({ id: w.id, word: w.word, meaning: shortMeaning(w.meaning) }));
   return { pairs, rightOrder: shuffle(pairs), selectedLeft: null, matched: [], wrong: [], attempts: 0, correct: 0 };
 }
+
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -174,7 +174,7 @@ function BrowseScreen({ words, expanded, canPlay, onExpand, onDelete, onQuiz, on
     try {
       const res = await fetch(`${API_BASE}/${MODEL}:generateContent?key=${key}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: buildPrompt(q, mode) }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 400 } }),
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: buildDictPrompt(q, mode) }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 220 } }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const d = await res.json();
@@ -255,7 +255,7 @@ function BrowseScreen({ words, expanded, canPlay, onExpand, onDelete, onQuiz, on
               {expanded === w.id && (
                 <div className="border-t-2 border-border px-4 pb-4 pt-3 flex flex-col gap-3">
                   <div className="prose prose-sm max-w-none text-sm leading-relaxed">
-                    <ReactMarkdown>{w.meaning}</ReactMarkdown>
+                    <ReactMarkdown>{displayMeaning(w.meaning)}</ReactMarkdown>
                   </div>
                   <button onClick={() => onDelete(w.id)}
                     className="self-end rounded-sm border-2 border-border bg-destructive/10 px-3 py-1.5 font-pixel text-[8px] text-destructive shadow-pixel-sm active:translate-y-0.5 active:shadow-none">
