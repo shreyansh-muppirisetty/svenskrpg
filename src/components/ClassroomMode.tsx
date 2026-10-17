@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
 import { detectAndSaveEnEtt } from "@/lib/enellerett";
+import { year7AssessmentPrompt } from "@/lib/classroom-assessment";
 
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const PROG_STORE = "svenska-quest-classroom-progress-v3";
@@ -347,7 +348,7 @@ function GradeMatrix({prog}:{prog:Progress}){
 
       {tg&&(
         <div className="rounded-sm border-2 border-border bg-card p-4 flex flex-col gap-2">
-          <span className="font-pixel text-[9px] text-muted-foreground">TERMINSBETYG — TERMIN {currentTerm}</span>
+          <span className="font-pixel text-[9px] text-muted-foreground">ÖVNINGSSNITT — PERIOD {currentTerm}</span>
           <div className="flex items-center gap-4">
             <span className={`inline-block rounded-sm px-4 py-2 font-pixel text-[24px] shadow-pixel ${GRADE_COLORS[tg]}`}>{tg}</span>
             <div className="flex flex-col gap-1">
@@ -360,7 +361,7 @@ function GradeMatrix({prog}:{prog:Progress}){
               );})}
             </div>
           </div>
-          {tg==="F"&&<p className="font-pixel text-[8px] text-destructive">⚠ F innebär att du inte nått kunskapskraven i en eller flera förmågor.</p>}
+          {tg==="F"&&<p className="font-pixel text-[8px] text-destructive">⚠ Övningsresultaten visar att du behöver träna mer inom ett eller flera områden.</p>}
         </div>
       )}
     </div>
@@ -453,7 +454,9 @@ export function ClassroomMode({onExit}:{onExit:()=>void}){
 
   function teacherSys(){
     if(!assignment)return"";
-    return`You are Läraren, a firm but encouraging Swedish teacher for Year 7/8 students (B1 level).
+    return`You are Läraren, a firm but encouraging Swedish teacher for årskurs 7.
+
+${year7AssessmentPrompt()}
 
 ASSIGNMENT:
 Type: ${TMETA[assignment.type].label}
@@ -471,9 +474,9 @@ ${answer||(msgs.length?"(se tidigare svar)":"(inget svar ännu)")}
 RULES:
 - Speak Swedish. Use English only if student writes in English.
 - Give hints without revealing answers. Challenge the student.
-- When grading (betyg/grade requested): grade strictly using A–F with specific feedback per criterion. Be honest — do not inflate grades. End response with EXACTLY this on its own line: [BETYG: X]
+- When grading (betyg/grade requested): follow the ASSESSMENT CONTEXT above over any conflicting answer-key rubric or task requirements. Give an honest A–F practice grade with feedback on criteria relevant to this task. Only when there is sufficient submitted work, end response with EXACTLY this on its own line: [BETYG: X]
 - When correcting (rätta): show what was wrong, why, and the correct version.
-- Hold students to B1 standard. If work is insufficient, say so clearly.
+- Hold students to the year-7 expectations above. If work is insufficient, explain the next step clearly.
 - Keep responses focused (max 8 sentences unless grading).`;
   }
 

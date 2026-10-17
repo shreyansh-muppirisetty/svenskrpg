@@ -16,6 +16,8 @@ export const Route = createFileRoute("/admin")({
       },
       { property: "og:title", content: "Adminpanel — Svenska Quest" },
       { property: "og:description", content: "Manage zones and game settings for Svenska Quest." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Admin,

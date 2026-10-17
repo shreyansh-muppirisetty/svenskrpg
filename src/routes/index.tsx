@@ -14,6 +14,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "A classroom mode for Swedish practice with AI-generated assignments, a dictionary, teacher chat, and saved grades." },
       { property: "og:title", content: "Svenska Quest — Klassrumsläge" },
       { property: "og:description", content: "Practice Swedish with AI-generated assignments, a dictionary, teacher chat, and saved grades." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Game,
