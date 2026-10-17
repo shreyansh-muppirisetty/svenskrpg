@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
 import { detectAndSaveEnEtt } from "@/lib/enellerett";
 import { year7AssessmentPrompt } from "@/lib/classroom-assessment";
+import { punctuationAssignmentPrompt, punctuationGuidance } from "@/lib/classroom-punctuation";
 
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const PROG_STORE = "svenska-quest-classroom-progress-v3";
@@ -121,8 +122,7 @@ const TMETA:Record<AT,{label:string;gen:string}>={
   find_synonyms:{label:"Synonymer & nyanser",gen:`Y7/8 Swedish: 8 words. For each: synonym + antonym + explain register/nuance difference (e.g. "arg" vs "upprörd" — more formal, stronger emotion). Include words with deceptive synonyms where meaning subtly shifts. Return ONLY valid JSON:
 {"type":"find_synonyms","title":"Synonymer, antonymer och nyansskillnader","instructions":"För varje ord: skriv ett synonym, ett antonym, och förklara kort nyansskillnaden mellan ordet och dess synonym (register, styrka, konnotation, formellt/informellt).","words":["glad","snabb","stor","gammal","varm","lång","tyst","lätt"],"answer_key":"glad: syn=lycklig(mer intensivt/positivt), ant=ledsen; ..."}`},
 
-  correct_punctuation:{label:"Rätta skiljetecknen",gen:`Y7/8 Swedish: paragraph with exactly 12 punctuation errors including: colon misuse, semicolon vs comma, missing comma before att-clause, wrong position around bisatser, missing hyphen in compound word, tankstreck vs bindestreck confusion, missing period, wrong apostrophe, comma in list. Return ONLY valid JSON:
-{"type":"correct_punctuation","title":"Rätta 12 skiljeteckenfel","instructions":"Texten har exakt 12 skiljeteckenfel (kolon, semikolon, kommatering vid bisatser, bindestreck, tankstreck, apostrof). Skriv den korrekta versionen OCH förklara varje enskilt fel.","text":"paragraph with 12 errors","answer_key":"CORRECT VERSION\nFel 1: ... (regel)\nFel 2: ..."}`},
+  correct_punctuation:{label:"Rätta skiljetecknen",gen:punctuationAssignmentPrompt()},
 
   summarize:{label:"Sammanfatta & analysera",gen:`Y7/8 Swedish: 280-word argumentative text with clear authorial perspective/agenda. 5 tasks: 1) summary 60–80 words, 2) identify syfte, 3) tonfall with textual evidence, 4) perspektiv (whose POV, what's excluded), 5) one rhetorical technique identified and explained. Return ONLY valid JSON:
 {"type":"summarize","title":"Sammanfatta och analysera text","instructions":"Utför ALLA fem uppgifterna:","text":"COMPLEX ARGUMENTATIVE TEXT WITH CLEAR STANCE","questions":["1. Sammanfatta texten i 60–80 ord med egna ord.","2. Vad är textens syfte?","3. Vilket tonfall har texten? Ge ett konkret belägg.","4. Ur vilket perspektiv är texten skriven — vad utelämnas medvetet?","5. Identifiera en retorisk teknik och förklara hur den används."],"answer_key":"Detailed model answers for all 5"}`},
@@ -457,6 +457,7 @@ export function ClassroomMode({onExit}:{onExit:()=>void}){
     return`You are Läraren, a firm but encouraging Swedish teacher for årskurs 7.
 
 ${year7AssessmentPrompt()}
+${assignment.type === "correct_punctuation" ? punctuationGuidance() : ""}
 
 ASSIGNMENT:
 Type: ${TMETA[assignment.type].label}
