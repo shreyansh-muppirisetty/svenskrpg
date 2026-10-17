@@ -1,16 +1,17 @@
-import { describe, expect, it } from "bun:test";
+import { describe, it } from "node:test";
+import { strict as assert } from "node:assert";
 import { CLASSROOM_ASSESSMENT } from "./classroom-assessment";
 
 describe("requested Swedish årskurs 7 assessment", () => {
   it("assesses svenska in year 7 rather than combined year 7/8", () => {
-    expect(CLASSROOM_ASSESSMENT.schoolYear).toBe(7);
-    expect(CLASSROOM_ASSESSMENT.subject).toBe("svenska");
+    assert.equal(CLASSROOM_ASSESSMENT.schoolYear, 7);
+    assert.equal(CLASSROOM_ASSESSMENT.subject, "svenska");
   });
   it("does not equate a Swedish school year with CEFR B1", () => {
-    expect(CLASSROOM_ASSESSMENT.cefrRequirement).toBeNull();
+    assert.equal(CLASSROOM_ASSESSMENT.cefrRequirement, null);
   });
   it("adapts the reference criteria to content already taught", () => {
-    expect(CLASSROOM_ASSESSMENT.referenceCriteriaYear).toBe(9);
-    expect(CLASSROOM_ASSESSMENT.assessOnlyTaughtContent).toBe(true);
+    assert.equal(CLASSROOM_ASSESSMENT.referenceCriteriaYear, 9);
+    assert.equal(CLASSROOM_ASSESSMENT.assessOnlyTaughtContent, true);
   });
 });
