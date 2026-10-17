@@ -6,6 +6,7 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -34,7 +35,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
@@ -87,8 +88,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Svenska Quest — Grammar Is the Game" },
       { name: "twitter:description", content: "A pixel-art RPG where Swedish grammar gates the story: five zones, V2 word order, en/ett, modals and subordinate clauses — under time pressure." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/26216f67-7948-4cbe-81ab-026bac63b4c3/id-preview-e6d445e8--46ddf643-625d-4749-b2b8-b53b644b2900.lovable.app-1785228031449.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/26216f67-7948-4cbe-81ab-026bac63b4c3/id-preview-e6d445e8--46ddf643-625d-4749-b2b8-b53b644b2900.lovable.app-1785228031449.png" },
     ],
     links: [
       {

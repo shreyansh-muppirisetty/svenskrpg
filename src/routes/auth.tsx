@@ -11,6 +11,8 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "Sign in to manage Svenska Quest zones and game settings." },
       { property: "og:title", content: "Logga in — Svenska Quest" },
       { property: "og:description", content: "Admin sign-in for the Svenska Quest grammar RPG." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: AuthPage,
