@@ -14,3 +14,4 @@
 - Share punctuation conventions between assignment generation and teacher marking in a browser-safe module, so the answer key cannot impose conflicting rules.
 
 - Keep rivalry identity migration, participation selection, and confrontation resolution in a browser-safe policy module shared by chats, calls, and tests so character behavior is consistent.
+- Keep local player identity and AI identity instructions in a browser-safe shared module; load the profile after hydration and inject identity at each conversation request boundary so all modes address the same player.

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { voiceFor } from "@/lib/voices";
+import { playerIdentityPrompt } from "@/lib/player-profile";
 import { RIVAL_NAME, RIVAL_REPLY, rivalryGuidance, resolveRivalExchange, isPushback } from "@/lib/chat-rivalry";
 
 // ── Minimal Gemini call (self-contained) ─────────────────────────────────────
@@ -15,7 +16,7 @@ async function gemini(key: string, turns: Turn[], system: string, maxTokens = 90
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
-      system_instruction: { parts: [{ text: system }] },
+      system_instruction: { parts: [{ text: `${system}\n${playerIdentityPrompt()}` }] },
       generationConfig: { temperature: 0.9, maxOutputTokens: maxTokens },
     }),
   });

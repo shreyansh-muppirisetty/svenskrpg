@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { CallOverlay } from "./CallOverlay";
 import { voiceFor } from "@/lib/voices";
+import { playerIdentityPrompt } from "@/lib/player-profile";
 import { RIVAL_NAME, RIVAL_REPLY, RIVAL_COOLDOWN_MS, rivalryGuidance, rivalMaySpeak, isPushback, migrateRivalState, resolveRivalExchange, type RivalLine } from "@/lib/chat-rivalry";
 
 
@@ -26,7 +27,7 @@ async function gemini(key: string, turns: GeminiTurn[], system?: string, maxToke
     })),
     generationConfig: { temperature: 0.9, maxOutputTokens: maxTokens },
   };
-  if (system) body.system_instruction = { parts: [{ text: system }] };
+  body.system_instruction = { parts: [{ text: [system, playerIdentityPrompt()].filter(Boolean).join("\n") }] };
   const res = await fetch(`${API_BASE}/${MODEL}:generateContent?key=${key}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
