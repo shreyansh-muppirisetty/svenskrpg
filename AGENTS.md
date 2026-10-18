@@ -12,3 +12,5 @@
 - Keep classroom assessment guidance in a browser-safe policy module shared by the teacher prompt and tests, so year-level requirements have a single source of truth.
 - Classroom matrix averages are practice summaries, not official Swedish term grades; a subject grade requires a teacher's holistic assessment.
 - Share punctuation conventions between assignment generation and teacher marking in a browser-safe module, so the answer key cannot impose conflicting rules.
+
+- Keep rivalry identity migration, participation selection, and confrontation resolution in a browser-safe policy module shared by chats, calls, and tests so character behavior is consistent.

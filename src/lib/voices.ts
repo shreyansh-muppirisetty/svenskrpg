@@ -5,7 +5,7 @@ const FEMALE = new Set([
 ]);
 
 const MALE = new Set([
-  "Alex", "Hugo", "Viggo", "Sam", "Jacob", "Johnny", "Noah", "Lucas", "William", "Oscar",
+  "Alex", "Hugo", "Mahmet", "Sam", "Jacob", "Johnny", "Noah", "Lucas", "William", "Oscar",
   "Leo", "Filip", "Elias", "Isak", "Nils",
 ]);
 

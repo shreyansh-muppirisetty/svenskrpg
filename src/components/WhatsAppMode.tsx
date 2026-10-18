@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { CallOverlay } from "./CallOverlay";
 import { voiceFor } from "@/lib/voices";
+import { RIVAL_NAME, RIVAL_REPLY, RIVAL_COOLDOWN_MS, rivalryGuidance, rivalMaySpeak, isPushback, migrateRivalState, resolveRivalExchange, type RivalLine } from "@/lib/chat-rivalry";
 
 
 // ── Gemini (same as rest of app) ──────────────────────────────────────────────
@@ -62,9 +63,9 @@ const PERSONAS: Record<string, string> = {
 };
 
 
-const CLASS_CHARS = `Alex: quiet, rarely texts, strict parents, soft-hearted; Hugo: football obsessed, best friends with Sam; Viggo: the user's rival/enemy, rarely joins unless there is drama or he is directly involved, but whenever he does write he is ALWAYS mean, mocking and hostile toward the user specifically (never nice, throws sarcastic insults and put-downs at the user, still friendly-ish to others); Sam: totally obsessed with football, enthusiastic; Jacob: kind and sweet but sensitive, overthinks; Johnny: popular, huge ego, cool, uses slang like ngl/fr/lowkey/no cap, never shows weakness; Emma: class representative, responsible, reminds about homework; Ella: always has the latest gossip; Noah: lurker, mostly short reactions; Lucas: funny and sarcastic, teases everyone; William: tech nerd into games, PCs and AI; Oscar: class clown, memes and jokes; Leo: relaxed, does not care about drama; Filip: competitive, tries to win every discussion; Elias: friendly, tries to stop arguments; Isak: dry humor, very short replies; Nils: loves cars and motorcycles; Maja: loud, energetic, starts conversations; Olivia: popular but kind, voice of reason; Sofia: friendly and supportive; Klara: curious, asks lots of questions`;
+const CLASS_CHARS = `Alex: quiet, rarely texts, strict parents, soft-hearted; Hugo: football obsessed, best friends with Sam; Mahmet: the user's rival/enemy, rarely joins unless there is drama or he is directly involved, but whenever he does write he is ALWAYS mean, mocking and hostile toward the user specifically (never nice, throws sarcastic insults and put-downs at the user, still friendly-ish to others, but after pushback says only håll käften and goes offline); Sam: totally obsessed with football, enthusiastic; Jacob: kind and sweet but sensitive, overthinks; Johnny: popular, huge ego, cool, uses slang like ngl/fr/lowkey/no cap, never shows weakness; Emma: class representative, responsible, reminds about homework; Ella: always has the latest gossip; Noah: lurker, mostly short reactions; Lucas: funny and sarcastic, teases everyone; William: tech nerd into games, PCs and AI; Oscar: class clown, memes and jokes; Leo: relaxed, does not care about drama; Filip: competitive, tries to win every discussion; Elias: friendly, defends the player and calls out Mahmet when he is rude; Isak: dry humor, very short replies; Nils: loves cars and motorcycles; Maja: loud, energetic, starts conversations; Olivia: popular but kind, voice of reason; Sofia: friendly and supportive; Klara: curious, asks lots of questions`;
 
-const CLASS_NAMES = ["Alex","Hugo","Viggo","Sam","Jacob","Johnny","Emma","Ella","Noah","Lucas","William","Oscar","Leo","Filip","Elias","Isak","Nils","Maja","Olivia","Sofia","Klara"];
+const CLASS_NAMES = ["Alex","Hugo","Mahmet","Sam","Jacob","Johnny","Emma","Ella","Noah","Lucas","William","Oscar","Leo","Filip","Elias","Isak","Nils","Maja","Olivia","Sofia","Klara"];
 
 /** Personality blurb for one classmate, taken from the class character sheet. */
 const TRAITS: Record<string,string> = Object.fromEntries(
@@ -79,7 +80,7 @@ const cidOf = (name: string) => name.toLowerCase();
 /** Persona used when a classmate is added as a private contact. */
 function personaFor(name: string): string {
   if (PERSONAS[cidOf(name)]) return PERSONAS[cidOf(name)];
-  return `You are ${name}, a 15yo Swedish student in class 8B. Your personality: ${TRAITS[name] ?? "an ordinary classmate"}. This is a private 1-on-1 WhatsApp DM with the user (a classmate). Reply in Swedish, 1-2 very short teen messages, mixing in English slang naturally, staying completely in character.`;
+  return `You are ${name}, a 15yo Swedish student in class 8B. Your personality: ${TRAITS[name] ?? "an ordinary classmate"}. This is a private 1-on-1 WhatsApp DM with the user (a classmate). Reply in Swedish, 1-2 very short teen messages, mixing in English slang naturally, staying completely in character. ${rivalryGuidance}`;
 }
 
 const initialsOf = (name: string) => name.slice(0, 2).toUpperCase();
@@ -310,9 +311,9 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const key = loadKey();
   const [active, setActive] = useState<CID|null>(null);
   const [calling, setCalling] = useState<CID|null>(null);
-  const saved = useRef<{convos?:Record<CID,Msg[]>; presence?:string[]; left?:number; added?:string[]} | null>(null);
+  const saved = useRef<{convos?:Record<CID,Msg[]>; presence?:string[]; left?:number; added?:string[]; rivalAwayUntil?:number} | null>(null);
   if (saved.current === null) {
-    try { saved.current = JSON.parse(localStorage.getItem(STORE) || "null") ?? {}; } catch { saved.current = {}; }
+    try { saved.current = migrateRivalState<Msg>(JSON.parse(localStorage.getItem(STORE) || "null") ?? {}); } catch { saved.current = {}; }
     const all = Object.values(saved.current?.convos ?? {}).flat() as Msg[];
     _id = all.reduce((m, x) => Math.max(m, x.id || 0), 0);
   }
@@ -325,6 +326,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const [presence, setPresence] = useState<string[]>(
     saved.current?.presence?.length ? saved.current.presence : pickN(CLASS_NAMES, rnd(4,7))
   );
+  const rivalAwayRef = useRef(saved.current?.rivalAwayUntil ?? 0);
   const [input, setInput] = useState("");
   const [att, setAtt] = useState<{dataUrl:string; mime:string; name:string; kind:"image"|"audio"|"file"}|null>(null);
   const [recording, setRecording] = useState(false);
@@ -413,6 +415,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setConvos({johnny:[],jacob:[],sam:[],class:[]});
     setUnread({johnny:0,jacob:0,sam:0,class:0});
     setAdded([]);
+    rivalAwayRef.current = 0;
     setPresence(pickN(CLASS_NAMES, rnd(4,7)));
     try { localStorage.removeItem(STORE); } catch { /* ignore */ }
     setActive(null);
@@ -426,15 +429,37 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
   const busyRef = useRef(false);
 
   useEffect(() => {
-    try { localStorage.setItem(STORE, JSON.stringify({ convos, presence, added, left: Date.now() })); } catch { /* ignore */ }
+    try { localStorage.setItem(STORE, JSON.stringify({ convos, presence, added, rivalAwayUntil: rivalAwayRef.current, left: Date.now() })); } catch { /* ignore */ }
   }, [convos, presence, added]);
 
 
-  function pushGroup(arr: {name:string;text:string;type?:string;imageDesc?:string;duration?:string}[]) {
+  function leaveRival() {
+    rivalAwayRef.current = Date.now() + RIVAL_COOLDOWN_MS;
+    setPresence(p => p.filter(n => n !== RIVAL_NAME));
+  }
+
+  function availableGroup(mentioned: string[] = []) {
+    const allowRival = rivalMaySpeak(rivalAwayRef.current, Date.now(), mentioned.includes(RIVAL_NAME));
+    const online = [...new Set([...stateRef.current.presence, ...mentioned])].filter(n => n !== RIVAL_NAME || allowRival);
+    return { online, allowRival };
+  }
+
+  function groupExchange(arr: RivalLine[], online: string[], allowRival: boolean, playerPushback = false, limit = Infinity) {
+    const known = arr.filter(l => CLASS_NAMES.includes(l.name) && online.includes(l.name));
+    const result = resolveRivalExchange(known, online, allowRival, playerPushback);
+    // Keep room for the departure while preserving offline message caps.
+    const lines = result.lines.length > limit && result.left
+      ? [...result.lines.slice(0, Math.max(0, limit - 1)), { name: RIVAL_NAME, text: RIVAL_REPLY, type: "text" }]
+      : result.lines.slice(0, limit);
+    if (result.left) leaveRival();
+    return lines;
+  }
+
+  function pushGroup(arr: RivalLine[]) {
     if (!arr.length) return;
     setConvos(c => ({
       ...c,
-      class: [...c.class, ...arr.map(m => ({
+      class: [...(c.class ?? []), ...arr.map(m => ({
         id: nid(), time: ts(), role: "contact" as const, sender: m.name,
         text: m.text || m.imageDesc || "", type: (m.type as Msg["type"]) || "text",
         imageDesc: m.imageDesc, duration: m.duration,
@@ -447,13 +472,16 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     if (!key || count <= 0 || busyRef.current) return;
     busyRef.current = true;
     try {
-      const online = stateRef.current.presence;
+      const available = availableGroup();
+      const allowRival = available.allowRival && count >= 3;
+      const online = available.online.filter(n => n !== RIVAL_NAME || allowRival);
+      if (!online.length) { busyRef.current = false; return; }
       const recent = (stateRef.current.convos.class ?? []).slice(-8).map(m => `${m.sender || "Du"}: ${m.text}`).join("\n");
       const raw = await gemini(key, [{
         role: "user",
-        text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${crossMemory("class")}${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
+        text: `Swedish WhatsApp class group chat (Klass 8B, 15-year-olds). Characters: ${CLASS_CHARS}. ${rivalryGuidance} ONLY these people are online right now and may write: ${online.join(", ")}. Recent messages:\n${recent || "(tom chatt)"}\n${crossMemory("class")}${note}\nGenerate exactly ${count} messages between them (the player is NOT writing). Keep an actual thread going — they answer each other, not the player. Very short (3-12 words), Swedish with teen English slang, no emoji spam. Occasionally an image or a voice note; for "audio" the "text" MUST be the spoken Swedish words. Return ONLY a JSON array: [{"name":"Maja","text":"var e alla","type":"text"}]`,
       }], undefined, 120 + count * 45);
-      pushGroup(parseArr<{name:string;text:string;type?:string;imageDesc?:string;duration?:string}>(raw).slice(0, count));
+      pushGroup(groupExchange(parseArr<RivalLine>(raw).slice(0, count), online, allowRival, false, count));
     } catch { /* silent background failure */ }
     busyRef.current = false;
   }
@@ -462,6 +490,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     if (!key || count <= 0 || cid === "class") return;
     try {
       const who = CONTACTS.find(c=>c.id===cid)?.name ?? cid;
+      if (who === RIVAL_NAME && !rivalMaySpeak(rivalAwayRef.current, Date.now())) return;
       const history = (stateRef.current.convos[cid] ?? []).slice(-8).map(m => `${m.role === "user" ? "Du" : who}: ${m.text}`).join("\n");
       const raw = await gemini(key, [{
         role: "user",
@@ -481,7 +510,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     if (!key || !left) return;
     const mins = (Date.now() - left) / 60000;
     if (mins < 1) return;
-    setPresence(p => driftPresence(p));
+    setPresence(p => driftPresence(p).filter(n => n !== RIVAL_NAME || Date.now() >= rivalAwayRef.current));
     const n = Math.min(MAX_OFFLINE_GROUP, Math.max(1, Math.round(mins / 2)));
     void groupChatter(n, `The player has been offline for about ${Math.round(mins)} minutes — this is everything they missed.`);
     for (const cid of pickN(dmIds, Math.random() < 0.5 ? rnd(1,2) : 0)) {
@@ -495,7 +524,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     if (!key) return;
     const i = setInterval(() => {
       if (stateRef.current.calling || stateRef.current.typing || busyRef.current) return;
-      setPresence(p => (Math.random() < 0.5 ? driftPresence(p) : p));
+      setPresence(p => (Math.random() < 0.5 ? driftPresence(p) : p).filter(n => n !== RIVAL_NAME || Date.now() >= rivalAwayRef.current));
       if ((stateRef.current.convos.class ?? []).length && Math.random() < 0.55) {
         void groupChatter(rnd(1, 3), "Continue the conversation naturally right now.");
       } else if (Math.random() < 0.15) {
@@ -514,14 +543,15 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     setTyping(true);
     try {
       if (id === "class") {
+        const { online, allowRival } = availableGroup();
         const raw = await gemini(key, [{
           role: "user",
-          text: `Simulate a Swedish WhatsApp class group chat (Klass 8B, 15-year-olds, 22 members). Generate 5-7 messages the user missed while offline. Characters: ${CLASS_CHARS}. Rules: very short messages (3-12 words each), no emoji spam, mix Swedish/English, realistic teen topics, stay true to each personality. Viggo only appears if there is drama, and when he does he is always mean and mocking toward the user. Occasionally one is an image or voice note. For "audio" messages, "text" MUST contain the spoken Swedish words of the voice note (it is played aloud, never shown). Return ONLY a JSON array, no other text: [{"name":"Maja","text":"omg guys","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"training today"},{"name":"Emma","text":"hej alla, glöm inte provet imorgon","type":"audio","duration":"0:11"}]`
+          text: `Simulate a Swedish WhatsApp class group chat (Klass 8B, 15-year-olds, 22 members). Only these people may write: ${online.join(", ")}. Generate 5-7 messages the user missed while offline. Characters: ${CLASS_CHARS}. ${rivalryGuidance} Rules: very short messages (3-12 words each), no emoji spam, mix Swedish/English, realistic teen topics, stay true to each personality. Mahmet only appears if there is drama, and when he does he is always mean and mocking toward the user. Occasionally one is an image or voice note. For "audio" messages, "text" MUST contain the spoken Swedish words of the voice note (it is played aloud, never shown). Return ONLY a JSON array, no other text: [{"name":"Maja","text":"omg guys","type":"text"},{"name":"Hugo","text":"","type":"image","imageDesc":"training today"},{"name":"Emma","text":"hej alla, glöm inte provet imorgon","type":"audio","duration":"0:11"}]`
         }], undefined, 500);
-        const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw);
-        arr.forEach(m => add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration}));
+        pushGroup(groupExchange(parseArr<RivalLine>(raw), online, allowRival, false, MAX_OFFLINE_GROUP));
       } else {
         const who = CONTACTS.find(c=>c.id===id)?.name ?? id;
+        if (who === RIVAL_NAME && !rivalMaySpeak(rivalAwayRef.current, Date.now())) { setTyping(false); return; }
         const reply = await gemini(key,
           [{role:"user", text:`${crossMemory(id)}The user just added/opened a private DM with you. Send one casual opening text — if you two just talked in the class group, refer to it naturally. One short sentence only. No quotation marks.`}],
           personaFor(who), 60
@@ -599,26 +629,42 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
         const mentioned = CLASS_NAMES.filter(n=>new RegExp(`@${n}\\b`,"i").test(text));
         // People who were actually talking with you, from those currently online.
         const talkers = [...new Set((convos.class ?? []).slice(-12).map(m=>m.sender).filter((n): n is string => !!n))];
-        const online = [...new Set([...presence, ...mentioned])];
-        const pool = [...new Set([...mentioned, ...talkers.filter(n=>online.includes(n)), ...online])];
-        const n = mentioned.length ? Math.min(pool.length, mentioned.length + (Math.random()<0.4?1:0)) : Math.min(pool.length, replyCount());
+        const recentRival = (convos.class ?? []).slice(-8).some(m => m.sender === RIVAL_NAME && m.text !== RIVAL_REPLY);
+        const directlyFlamed = isPushback(text) && (mentioned.includes(RIVAL_NAME) || recentRival);
+        if (directlyFlamed && Date.now() >= rivalAwayRef.current) {
+          pushGroup([{ name: RIVAL_NAME, text: RIVAL_REPLY, type: "text" }]);
+          leaveRival(); setTyping(false); return;
+        }
+        const { online, allowRival } = availableGroup(mentioned);
+        const eligibleMentions = mentioned.filter(n => online.includes(n));
+        const pool = [...new Set([...eligibleMentions, ...talkers.filter(n=>online.includes(n)), ...online])];
+        const n = eligibleMentions.length ? Math.min(pool.length, eligibleMentions.length + (Math.random()<0.4?1:0)) : Math.min(pool.length, replyCount());
         if (n === 0) { setTyping(false); return; }
-        const speakers = [...mentioned, ...pool.filter(p=>!mentioned.includes(p)).slice(0, Math.max(0, n - mentioned.length))].slice(0, n);
+        const speakers = [...eligibleMentions, ...pool.filter(p=>!eligibleMentions.includes(p)).slice(0, Math.max(0, n - eligibleMentions.length))].slice(0, n);
         const mentionRule = mentioned.length
-          ? ` The user directly called out ${mentioned.join(", ")} with @mentions — those people reply first, in that order, each staying fully in character (Viggo replies mean and mocking toward the user).`
+          ? ` The user directly called out ${mentioned.join(", ")} with @mentions — those people reply first, in that order, each staying fully in character (Mahmet replies mean and mocking toward the user).`
           : "";
         const raw = await gemini(key, [{
           role: "user",
           files,
-          text: `Swedish class WhatsApp group. Online right now: ${online.join(", ")}. Recent messages:\n${recent}\n${crossMemory("class")}User just sent: "${text}"${attNote}\nGenerate exactly ${n} short replies, only from these people and in this order: ${speakers.join(", ")}. Characters: ${CLASS_CHARS}.${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
+          text: `Swedish class WhatsApp group. Online right now: ${online.join(", ")}. Recent messages:\n${recent}\n${crossMemory("class")}User just sent: "${text}"${attNote}\nGenerate exactly ${n} short replies, only from these people and in this order: ${speakers.join(", ")}. Characters: ${CLASS_CHARS}. ${rivalryGuidance}${mentionRule} Rules: very short (3-12 words), no emoji spam, mix Swedish/English, can react to user or sidetrack, occasionally image or audio. For "audio", "text" MUST be the spoken Swedish words of the voice note. Return ONLY JSON array: [{"name":"Ella","text":"omg fr","type":"text"}]`
         }], undefined, 300);
-        const arr = parseArr<{name:string;text:string;type:string;imageDesc?:string;duration?:string}>(raw).slice(0, n);
+        const lastRival = (convos.class ?? []).slice(-8).some(m => m.sender === RIVAL_NAME && m.text !== RIVAL_REPLY);
+        const playerPushback = isPushback(text) && (mentioned.includes(RIVAL_NAME) || lastRival);
+        const arr = groupExchange(parseArr<RivalLine>(raw).slice(0, n), online, allowRival, playerPushback);
         for (const m of arr) {
           await new Promise(r=>setTimeout(r,400+Math.random()*900));
           add("class",{role:"contact",sender:m.name,text:m.text||m.imageDesc||"",type:(m.type as Msg["type"])||"text",imageDesc:m.imageDesc,duration:m.duration});
         }
       } else {
         const who = CONTACTS.find(c=>c.id===active)?.name ?? active;
+        if (who === RIVAL_NAME) {
+          if (Date.now() < rivalAwayRef.current) { setTyping(false); return; }
+          if (isPushback(text)) {
+            add(active, { role: "contact", text: RIVAL_REPLY, type: "text" });
+            leaveRival(); setTyping(false); return;
+          }
+        }
         const history: GeminiTurn[] = (convos[active] ?? []).slice(-10).map(m=>({
           role: m.role==="user" ? "user" : "model" as "user"|"model",
           text: m.text,
@@ -646,6 +692,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     const cid = calling;
     setCalling(null);
     if (!cid || !transcript.length) return;
+    if (transcript.some(l => l.name === RIVAL_NAME && l.text === RIVAL_REPLY)) leaveRival();
     // Fold what was said on the call into the chat history, so later chats
     // (and the next call's `memory`) actually remember it.
     setConvos(c => ({
