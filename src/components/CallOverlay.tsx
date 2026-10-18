@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { voiceFor } from "@/lib/voices";
+import { RIVAL_NAME, rivalryGuidance, resolveRivalExchange, isPushback } from "@/lib/chat-rivalry";
 
 // ── Minimal Gemini call (self-contained) ─────────────────────────────────────
 
@@ -94,9 +95,9 @@ export function CallOverlay({
   const [muted, setMuted] = useState(false);
 
   // Random 2–22 classmates actually pick up the group call.
-  const [joined] = useState<string[]>(() => {
+  const [joined, setJoined] = useState<string[]>(() => {
     if (!group) return [];
-    const pool = [...group.names];
+    const pool = group.names.filter(n => n !== RIVAL_NAME || Math.random() < 0.12);
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -105,6 +106,7 @@ export function CallOverlay({
     return pool.slice(0, n);
   });
 
+  const respondRef = useRef<(text: string) => Promise<void>>(async () => {});
   const historyRef = useRef<Turn[]>([]);
   /** Full call transcript (unlike `lines`, which is trimmed for on-screen display). */
   const transcriptRef = useRef<Line[]>([]);
@@ -119,7 +121,7 @@ export function CallOverlay({
     : "";
 
   const systemBase = group
-    ? `This is a Swedish class group PHONE CALL (Klass 8B, 15-year-olds). On the call right now: ${joined.join(", ")}. Characters: ${group.chars}. Everyone speaks natural spoken Swedish, 1 short sentence each, no emoji, no asterisks, no formatting. People talk over each other, joke and react to each other, and Viggo (if present) is always mean and mocking toward the user.${memoryBlock}`
+    ? `This is a Swedish class group PHONE CALL (Klass 8B, 15-year-olds). On the call right now: ${joined.join(", ")}. Characters: ${group.chars}. Everyone speaks natural spoken Swedish, 1 short sentence each, no emoji, no asterisks, no formatting. People talk over each other, joke and react to each other, and Mahmet (if present) is always mean and mocking toward the user. ${rivalryGuidance}${memoryBlock}`
     : `${persona}\nYou are on a PHONE CALL — speak naturally, 1-2 short spoken Swedish sentences. No emoji, no asterisks, no formatting.${memoryBlock}`;
   const systemRef = useRef(systemBase);
   systemRef.current = systemBase;
@@ -187,7 +189,7 @@ export function CallOverlay({
       if (!aliveRef.current) return;
       const text = finalText.trim();
       if (!text) { listen(); return; }
-      void respond(text);
+      void respondRef.current(text);
     };
     try { rec.start(); } catch { /* already running */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,7 +220,9 @@ export function CallOverlay({
           220,
         );
         const arr = parseArr<Line>(raw).filter((l) => l && l.text);
-        const out = arr.length ? arr : [{ name: speakers[0], text: "Hallå? Jag hörde inte." }];
+        const exchange = resolveRivalExchange(arr.length ? arr : [{ name: speakers[0] ?? "Maja", text: "Hallå? Jag hörde inte." }], joined, joined.includes(RIVAL_NAME), isPushback(text) && joined.includes(RIVAL_NAME));
+        const out = exchange.lines;
+        if (exchange.left) setJoined(p => p.filter(n => n !== RIVAL_NAME));
         historyRef.current = [...historyRef.current, { role: "model", text: out.map((l) => `${l.name}: ${l.text}`).join("\n") }];
         transcriptRef.current.push(...out);
         await playLines(out);
@@ -237,6 +241,8 @@ export function CallOverlay({
     listen();
   }, [apiKey, group, joined, contact.name, playLines, listen]);
 
+  respondRef.current = respond;
+
   // Ring, then answer and greet.
   useEffect(() => {
     aliveRef.current = true;
@@ -253,7 +259,9 @@ export function CallOverlay({
             200,
           );
           const arr = parseArr<Line>(raw).filter((l) => l && l.text);
-          const out = arr.length ? arr : greeters.map((n) => ({ name: n, text: "Hallå!" }));
+          const exchange = resolveRivalExchange(arr.length ? arr : greeters.map((n) => ({ name: n, text: "Hallå!" })), joined, joined.includes(RIVAL_NAME));
+          const out = exchange.lines;
+          if (exchange.left) setJoined(p => p.filter(n => n !== RIVAL_NAME));
           historyRef.current = [{ role: "model", text: out.map((l) => `${l.name}: ${l.text}`).join("\n") }];
           transcriptRef.current.push(...out);
           await playLines(out);
