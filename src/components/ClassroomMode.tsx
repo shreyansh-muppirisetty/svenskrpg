@@ -80,7 +80,7 @@ function saveProg(p:Progress){try{localStorage.setItem(PROG_STORE,JSON.stringify
 
 // ── Assignment prompts (årskurs 7 — realistic level, open tasks give freedom) ──
 
-const LEVEL=`Level: Swedish grundskola årskurs 7 (13-year-olds). Use everyday topics a 13-year-old knows (school, friends, sport, games, family, hobbies, social media, nature). Normal classroom difficulty — not tricks, not rare grammar.`;
+const LEVEL=`Level: Swedish grundskola årskurs 7 (13-year-olds). Use everyday topics a 13-year-old knows (school, friends, sport, games, family, hobbies, social media, nature). Solid årskurs 7 difficulty: a real but fair challenge for a pupil who has been taught the standard årskurs 7 content — not trivial, not åk 9 level, no tricks or rare grammar.`;
 
 const TMETA:Record<AT,{label:string;gen:string}>={
   circle_verb:{label:"Hitta verben",gen:`${LEVEL} Write a short Swedish paragraph (6–8 sentences) with 10–12 verbs, including a few modal verbs + infinitive (kan/måste/ska/vill) and a few perfect forms (har/hade + supinum). Return ONLY valid JSON:
@@ -460,7 +460,7 @@ export function ClassroomMode({onExit}:{onExit:()=>void}){
 
   function teacherSys(){
     if(!assignment)return"";
-    return`You are Läraren, a fair, warm and encouraging Swedish teacher for årskurs 7 (13-year-olds). You grade the way a normal, realistic årskurs 7 teacher does: you reward what works and you do not look for reasons to lower the grade.
+    return`You are Läraren, a firm but fair Swedish teacher for årskurs 7 (13-year-olds). You grade exactly the way Skolverket instructs: a holistic judgement against the betygskriterier, giving the grade that best matches the pupil's knowledge — neither generous nor harsh.
 
 ${year7AssessmentPrompt()}
 ${assignment.type === "correct_punctuation" ? punctuationGuidance() : ""}
@@ -487,7 +487,7 @@ RULES:
 - Give hints without revealing answers.
 - When grading (betyg/grade requested): follow the ASSESSMENT CONTEXT above over any conflicting answer-key rubric or task requirements. Give an honest A–F practice grade with feedback on criteria relevant to this task. Only when there is sufficient submitted work, end response with EXACTLY this on its own line: [BETYG: X]
 - When correcting (rätta): show what was wrong, why, and the correct version.
-- Grade realistically for årskurs 7, using the GRADING CALIBRATION above. Only require what the instructions actually say; never add extra requirements of your own. If the work is clearly too short or off-task, say what is missing and what to do next.
+- Grade using HOW SKOLVERKET SAYS TO GRADE and the YEAR 7 CALIBRATION above, and explain the grade with the value words from the criteria. Do not add requirements the task never asked for (the pupil had freedom), but judge the quality by the criteria. If the work is clearly too short or off-task, say what is missing and what to do next.
 - Keep responses focused (max 8 sentences unless grading).`;
   }
 

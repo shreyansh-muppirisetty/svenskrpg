@@ -17,19 +17,33 @@ describe("requested Swedish årskurs 7 assessment", () => {
 });
 import { closedExerciseGrade, year7AssessmentPrompt } from "./classroom-assessment";
 
-describe("realistic årskurs 7 grading", () => {
-  it("maps closed-exercise results to fair grades", () => {
-    assert.equal(closedExerciseGrade(1), "A");
-    assert.equal(closedExerciseGrade(0.8), "B");
-    assert.equal(closedExerciseGrade(0.65), "C");
-    assert.equal(closedExerciseGrade(0.5), "D");
-    assert.equal(closedExerciseGrade(0.35), "E");
-    assert.equal(closedExerciseGrade(0.1), "F");
+describe("grading follows Skolverket's rules", () => {
+  it("is a holistic judgement with D between C and E and B between A and C", () => {
+    assert.equal(CLASSROOM_ASSESSMENT.holisticJudgement, true);
+    assert.deepEqual(CLASSROOM_ASSESSMENT.intermediateGrades, { D: ["C", "E"], B: ["A", "C"] });
   });
-  it("grades only on stated requirements and rounds borderline cases up", () => {
-    assert.equal(CLASSROOM_ASSESSMENT.gradeOnlyStatedRequirements, true);
-    assert.equal(CLASSROOM_ASSESSMENT.borderlineGoesUp, true);
-    assert.match(year7AssessmentPrompt(), /GRADING CALIBRATION/);
-    assert.match(year7AssessmentPrompt(), /higher grade/);
+  it("quotes the official årskurs 9 criteria and value words", () => {
+    const prompt = year7AssessmentPrompt();
+    assert.match(prompt, /i huvudsak fungerande struktur och innehåll/);
+    assert.match(prompt, /relativt god språklig variation/);
+    assert.match(prompt, /väl fungerande struktur och innehåll/);
+    assert.match(prompt, /mellan C och E/);
+    assert.match(prompt, /mellan A och C/);
+    assert.match(prompt, /sammantagen bedömning/);
+  });
+  it("keeps language norms as a real criterion and does not inflate grades", () => {
+    const prompt = year7AssessmentPrompt();
+    assert.match(prompt, /recurring errors DO count/);
+    assert.match(prompt, /Do not inflate/);
+    assert.doesNotMatch(prompt, /higher grade/);
+  });
+  it("uses the percentage scale only as a rough aid for closed exercises", () => {
+    assert.equal(closedExerciseGrade(0.95), "A");
+    assert.equal(closedExerciseGrade(0.82), "B");
+    assert.equal(closedExerciseGrade(0.72), "C");
+    assert.equal(closedExerciseGrade(0.62), "D");
+    assert.equal(closedExerciseGrade(0.5), "E");
+    assert.equal(closedExerciseGrade(0.4), "F");
+    assert.match(year7AssessmentPrompt(), /ROUGH aid only/);
   });
 });
