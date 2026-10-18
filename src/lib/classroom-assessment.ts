@@ -8,9 +8,12 @@
  * percentages exist in the national rules. D = "mellan C och E", B = "mellan A och C".
  * E requires that the criteria for E are met in the assessed parts.
  *
- * There are no separate national criteria for årskurs 7 (national criteria exist for årskurs 6
- * and 9), so the årskurs 9 criteria are the goal and are applied in proportion to what has been
- * taught in årskurs 7. This app only gives *practice* grades, never an official term grade.
+ * Årskurs 7 (Skolverket, "Terminsbetyg"): there are no betygskriterier for årskurs 7. The term grade
+ * rests on the pupil's knowledge at the time, the årskurs 9 criteria, and what the teaching has given
+ * the pupil the chance to develop (untaught parts are not counted). All grade steps A–F are possible
+ * every term, but the requirements are adapted: somewhat lower ("lite lägre krav") than in årskurs 9.
+ * The "all parts of E must be shown" rule applies to final grades at the end of årskurs 6 and 9.
+ * This app only gives *practice* grades, never an official term grade.
  */
 export const CLASSROOM_ASSESSMENT = {
   subject: "svenska",
@@ -24,6 +27,12 @@ export const CLASSROOM_ASSESSMENT = {
   missingEvidenceIsFail: false,
   /** Grades are a holistic judgement against the criteria, not an average or a point sum. */
   holisticJudgement: true,
+  /** Skolverket: every grade step A–F is possible in årskurs 7, with requirements adapted to the year. */
+  allGradeStepsPossible: true,
+  /** Skolverket: slightly lower requirements in årskurs 7–8 than in årskurs 9 (not much lower). */
+  requirementsSlightlyLowerThanYear9: true,
+  /** Never steer toward or away from a particular grade (D included); grade what the work deserves. */
+  neverSteerTowardAGrade: true,
   /** D sits between C and E, B between A and C (Skolverket's wording). */
   intermediateGrades: { D: ["C", "E"], B: ["A", "C"] },
   /**
@@ -79,19 +88,24 @@ export function year7AssessmentPrompt(): string {
 ${SKOLVERKET_CRITERIA}
 
 HOW SKOLVERKET SAYS TO GRADE (follow this procedure):
-1. Grading is a holistic judgement ("sammantagen bedömning"): set the grade that BEST MATCHES the pupil's knowledge as shown in this work. It is not a points sum, not an average of parts and not a percentage. Do not look for reasons to go up or down; decide what the evidence honestly matches.
+1. Grading is a holistic judgement ("sammantagen bedömning"): set the grade that BEST MATCHES the pupil's knowledge as shown in this work. It is not a points sum, not an average of parts and not a percentage.
 2. Identify which criteria this task can show (e.g. skriva, läsa/resonera, språkliga normer). Assess ONLY those. Something the task cannot show (oral skills, a source search) is neither passed nor failed.
 3. Judge each shown aspect by Skolverket's value words: E = viss / i huvudsak fungerande / grundläggande / enkla; C = relativt god / fungerande / god / utvecklade; A = god / väl fungerande / mycket god / välutvecklade.
-4. E requires that the E-level is reached in every aspect the task shows. If a shown aspect is clearly below E (for example the text is not understandable, or most answers are wrong) the practice grade is F.
-5. D = E is fully reached and C is reached to a considerable extent, but not fully ("mellan C och E"). B = C is fully reached and A is reached to a considerable extent ("mellan A och C"). A needs the A-level overall, not in just one aspect. C needs the C-level overall.
-6. Use the value words in your explanation, so the pupil can see why the work lands where it does.
+4. If a shown aspect is clearly below E (for example the text is not understandable, or most answers are wrong) the practice grade is F.
+5. D = the work is clearly above E but does not fully reach C ("mellan C och E"). B = the work is clearly above C but does not fully reach A ("mellan A och C"). A needs the A-level overall, not in just one aspect. C needs the C-level overall. D and B are completely ordinary grades: use them whenever they are what the work matches.
+6. GIVE EVERY GRADE ITS DUE. Grade exactly what the work deserves — A, B, C, D, E or F. Never steer toward or away from any particular grade, never "round up" to be kind and never "round down" to be strict.
+7. Use the value words in your explanation, so the pupil can see why the work lands where it does.
 
-YEAR 7 CALIBRATION (our interpretation — firm but realistic):
-- There are no national year-7 criteria. The årskurs 9 criteria above are the goal; judge how well this årskurs 7 pupil's work meets them for what has actually been taught and practised. Do not demand end-of-year-9 achievement, and do not hand out high grades just because the pupil is 13.
-- Typical meanings for a 13-year-old: E = understandable text with a basic working structure (intro, content, ending), some variation in words and sentence openings, mostly follows spelling and punctuation norms even though errors occur. C = clear and well organised, relatively good variation (varied sentence openings, connectors, vocabulary), adapted to the text type and reader, norms followed so that errors are few and rarely disturb. A = varied and well-built, clearly adapted, norms followed very well with only occasional slips, with well-developed ideas.
+HOW ÅRSKURS 7 WORKS (official Skolverket guidance for terminsbetyg):
+- There are no betygskriterier for årskurs 7. The grade is based on what the pupil knows now, measured against the årskurs 9 criteria above, and on what the teaching has given the pupil the chance to develop. Parts of the criteria that have not been taught are not counted.
+- ALL grade steps A–F are possible in årskurs 7 (even an A in the first term), but the requirements are adapted to the year: Skolverket says to demand somewhat lower ("lite lägre") requirements in årskurs 7 than in årskurs 9 for what e.g. "ett enkelt resonemang" or "ett komplext samband" means. Somewhat lower is not much lower: the value words stay the standard, and a fair year-7 teacher still expects real quality for a high grade.
+- The strict rule that every part of E must be shown applies to final grades at the end of årskurs 6 and 9. For this årskurs 7 practice grade, assess the parts this task can show and that have been taught.
+
+YEAR 7 CALIBRATION (our interpretation of the value words for a 13-year-old):
+- E = understandable text with a basic working structure (intro, content, ending), some variation in words and sentence openings, mostly follows spelling and punctuation norms even though errors occur. C = clear and well organised, relatively good variation (varied sentence openings, connectors, vocabulary), adapted to the text type and reader, norms followed so that errors are few and rarely disturb. A = varied and well-built, clearly adapted, norms followed very well with only occasional slips, with well-developed ideas.
 - Language norms (spelling, punctuation, grammar, word order, en/ett, verb forms) are an actual criterion in all written work, so recurring errors DO count: weigh them by how often they occur and whether they disturb the reader. A still does not require error-free work.
-- A is clearly strong work for the level, not the default for a decent attempt. C is a good, solid result. E is acceptable but simple. Do not inflate, and do not punish: the grade should be what an experienced, fair årskurs 7 teacher would honestly give.
-- Closed exercises (grammar, vocabulary, translation, word classes, fill in the blanks, conjugation, en/ett) mostly show "följer språkliga normer" and "urskilja språkliga strukturer". Count answers that are valid in context as correct even if the answer key words it differently, and give half credit to answers that are partly right. As a ROUGH aid only (not a rule): A at about ${pct(t.A)} correct, B ${pct(t.B)}, C ${pct(t.C)}, D ${pct(t.D)}, E ${pct(t.E)}, F below. If the share correct and the nature of the errors point in different directions (e.g. errors are all the same misunderstanding vs. random slips), use judgement.
+- Do not demand year-9 level, and do not give high grades just because the pupil is 13. The grade should be what an experienced, fair årskurs 7 teacher would honestly give.
+- Closed exercises (grammar, vocabulary, translation, word classes, fill in the blanks, conjugation, en/ett) mostly show "följer språkliga normer" and "urskilja språkliga strukturer". Count answers that are valid in context as correct even if the answer key words it differently, and give half credit to answers that are partly right. As a ROUGH aid only (not a rule): A at about ${pct(t.A)} correct, B ${pct(t.B)}, C ${pct(t.C)}, D ${pct(t.D)}, E ${pct(t.E)}, F below. If the share correct and the nature of the errors point in different directions (e.g. all errors are the same misunderstanding vs. random slips), use judgement.
 - Open writing (story, letter, opinion text, dialogue, poem, summaries, short answers): judge the whole text against the SKRIVA and LÄSA criteria above. The task deliberately leaves freedom, so do not demand things it never asked for; but quality of language, structure, variation and adaptation to the task still decide the grade. If the text is clearly shorter than asked, it gives less evidence: mention it and let it affect structure/innehåll as it honestly does, without an automatic ceiling.
 - Too little to assess (almost nothing submitted) is NOT automatically F: ask for the missing work and do not emit a grade marker.
 - Feedback: say the grade, explain it with the value words (which criteria, at which level, and what separates it from the next grade up), name the one or two most useful errors with the correct form, and end with one concrete next step. Honest and encouraging, never invent evidence.`;

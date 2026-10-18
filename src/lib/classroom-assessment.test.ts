@@ -34,7 +34,7 @@ describe("grading follows Skolverket's rules", () => {
   it("keeps language norms as a real criterion and does not inflate grades", () => {
     const prompt = year7AssessmentPrompt();
     assert.match(prompt, /recurring errors DO count/);
-    assert.match(prompt, /Do not inflate/);
+    assert.match(prompt, /do not give high grades just because the pupil is 13/);
     assert.doesNotMatch(prompt, /higher grade/);
   });
   it("uses the percentage scale only as a rough aid for closed exercises", () => {
@@ -45,5 +45,23 @@ describe("grading follows Skolverket's rules", () => {
     assert.equal(closedExerciseGrade(0.5), "E");
     assert.equal(closedExerciseGrade(0.4), "F");
     assert.match(year7AssessmentPrompt(), /ROUGH aid only/);
+  });
+});
+
+describe("årskurs 7 follows Skolverket's terminsbetyg guidance", () => {
+  it("allows every grade step with somewhat lower requirements than årskurs 9", () => {
+    assert.equal(CLASSROOM_ASSESSMENT.allGradeStepsPossible, true);
+    assert.equal(CLASSROOM_ASSESSMENT.requirementsSlightlyLowerThanYear9, true);
+    const prompt = year7AssessmentPrompt();
+    assert.match(prompt, /HOW ÅRSKURS 7 WORKS/);
+    assert.match(prompt, /ALL grade steps A–F are possible/);
+    assert.match(prompt, /not counted/);
+  });
+  it("never steers toward or away from a grade, D included", () => {
+    assert.equal(CLASSROOM_ASSESSMENT.neverSteerTowardAGrade, true);
+    const prompt = year7AssessmentPrompt();
+    assert.match(prompt, /GIVE EVERY GRADE ITS DUE/);
+    assert.match(prompt, /D and B are completely ordinary grades/);
+    assert.doesNotMatch(prompt, /Never give D|D is rare|rarely give D/i);
   });
 });
