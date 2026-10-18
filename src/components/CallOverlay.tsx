@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { voiceFor } from "@/lib/voices";
-import { RIVAL_NAME, rivalryGuidance, resolveRivalExchange, isPushback } from "@/lib/chat-rivalry";
+import { RIVAL_NAME, RIVAL_REPLY, rivalryGuidance, resolveRivalExchange, isPushback } from "@/lib/chat-rivalry";
 
 // ── Minimal Gemini call (self-contained) ─────────────────────────────────────
 
@@ -227,11 +227,19 @@ export function CallOverlay({
         transcriptRef.current.push(...out);
         await playLines(out);
       } else {
-        const reply = await gemini(apiKey, historyRef.current, systemRef.current);
+        const reply = contact.name === RIVAL_NAME && isPushback(text)
+          ? RIVAL_REPLY
+          : await gemini(apiKey, historyRef.current, systemRef.current);
         if (!aliveRef.current) return;
         historyRef.current = [...historyRef.current, { role: "model", text: reply }];
         transcriptRef.current.push({ name: contact.name, text: reply });
         await playLines([{ name: contact.name, text: reply }]);
+        if (contact.name === RIVAL_NAME && reply.trim().toLowerCase() === RIVAL_REPLY) {
+          aliveRef.current = false;
+          setPhase("ended");
+          onEnd(transcriptRef.current);
+          return;
+        }
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Fel");
@@ -239,7 +247,7 @@ export function CallOverlay({
     if (!aliveRef.current) return;
     if (mutedRef.current) { setPhase("listening"); return; }
     listen();
-  }, [apiKey, group, joined, contact.name, playLines, listen]);
+  }, [apiKey, group, joined, contact.name, playLines, listen, onEnd]);
 
   respondRef.current = respond;
 

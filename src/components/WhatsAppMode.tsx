@@ -472,8 +472,10 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     if (!key || count <= 0 || busyRef.current) return;
     busyRef.current = true;
     try {
-      const { online, allowRival } = availableGroup();
-      if (!online.length) return;
+      const available = availableGroup();
+      const allowRival = available.allowRival && count >= 3;
+      const online = available.online.filter(n => n !== RIVAL_NAME || allowRival);
+      if (!online.length) { busyRef.current = false; return; }
       const recent = (stateRef.current.convos.class ?? []).slice(-8).map(m => `${m.sender || "Du"}: ${m.text}`).join("\n");
       const raw = await gemini(key, [{
         role: "user",
@@ -690,6 +692,7 @@ export function WhatsAppMode({ onExit }: { onExit: () => void }) {
     const cid = calling;
     setCalling(null);
     if (!cid || !transcript.length) return;
+    if (transcript.some(l => l.name === RIVAL_NAME && l.text === RIVAL_REPLY)) leaveRival();
     // Fold what was said on the call into the chat history, so later chats
     // (and the next call's `memory`) actually remember it.
     setConvos(c => ({
