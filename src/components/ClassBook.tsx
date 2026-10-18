@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
 import { detectAndSaveEnEtt } from "@/lib/enellerett";
+import { playerIdentityPrompt } from "@/lib/player-profile";
 
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const BOOK_STORE = "svenska-quest-classbook-v1";
@@ -84,6 +85,7 @@ async function gemini(key: string, prompt: string, maxTokens = 1500): Promise<st
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
+      systemInstruction: { parts: [{ text: playerIdentityPrompt() }] },
       generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
     }),
   });

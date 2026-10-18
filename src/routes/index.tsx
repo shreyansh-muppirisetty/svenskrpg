@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { PlayerNameSetup } from "@/components/PlayerNameSetup";
+import { loadPlayerName } from "@/lib/player-profile";
 
 import { ClassroomMode } from "@/components/ClassroomMode";
 import { ClassBook } from "@/components/ClassBook";
@@ -25,13 +27,19 @@ type Screen = { view: "map" } | { view: "classroom" } | { view: "classbook" } | 
 
 function Game() {
   const [screen, setScreen] = useState<Screen>({ view: "map" });
+  const [playerName, setPlayerName] = useState<string | null>(null);
+
+  useEffect(() => { setPlayerName(loadPlayerName()); }, []);
+
+  if (playerName === null) return <main className="min-h-screen bg-background" />;
+  if (!playerName) return <PlayerNameSetup onComplete={setPlayerName} />;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-5 px-4 py-8">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-pixel text-lg leading-relaxed text-primary sm:text-2xl">SVENSKA QUEST</h1>
-          <p className="text-muted-foreground">Klassrumsläge · Läraren</p>
+          <p className="break-words text-muted-foreground">Hej {playerName} · Klassrumsläge</p>
         </div>
         <div className="flex gap-2">
           {screen.view !== "map" && (

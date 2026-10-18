@@ -4,6 +4,7 @@ import { DictionaryPanel } from "@/components/DictionaryPanel";
 import { detectAndSaveEnEtt } from "@/lib/enellerett";
 import { year7AssessmentPrompt } from "@/lib/classroom-assessment";
 import { punctuationAssignmentPrompt, punctuationGuidance } from "@/lib/classroom-punctuation";
+import { playerIdentityPrompt } from "@/lib/player-profile";
 
 const KEY_STORE = "svenska-quest-classroom-gemini-key";
 const PROG_STORE = "svenska-quest-classroom-progress-v3";
@@ -150,7 +151,7 @@ function extractJson(raw:string):string{
 async function geminiRaw(key:string,prompt:string,maxTok=1500):Promise<string>{
   const res=await fetch(`${API_BASE}/${MODEL}:generateContent?key=${key}`,{
     method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.95,maxOutputTokens:maxTok}}),
+    body:JSON.stringify({systemInstruction:{parts:[{text:playerIdentityPrompt()}]},contents:[{role:"user",parts:[{text:prompt}]}],generationConfig:{temperature:0.95,maxOutputTokens:maxTok}}),
   });
   if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e as {error?:{message?:string}})?.error?.message??`HTTP ${res.status}`);}
   const d=await res.json();
@@ -161,7 +162,7 @@ async function geminiChat(key:string,sys:string,history:Msg[],text:string):Promi
   const contents=[...history.map(m=>({role:m.role,parts:[{text:m.text}]})),{role:"user",parts:[{text}]}];
   const res=await fetch(`${API_BASE}/${MODEL}:generateContent?key=${key}`,{
     method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents,generationConfig:{temperature:0.7,maxOutputTokens:700}}),
+    body:JSON.stringify({systemInstruction:{parts:[{text:`${sys}\n${playerIdentityPrompt()}`}]},contents,generationConfig:{temperature:0.7,maxOutputTokens:700}}),
   });
   if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error((e as {error?:{message?:string}})?.error?.message??`HTTP ${res.status}`);}
   const d=await res.json();
