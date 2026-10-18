@@ -9,21 +9,43 @@ export const CLASSROOM_ASSESSMENT = {
   requireErrorFreeWorkForA: false,
   enforceWordCountAsGradeCeiling: false,
   missingEvidenceIsFail: false,
+  /** When the evidence sits between two grades, give the higher one. */
+  borderlineGoesUp: true,
+  /** Never demand more than the assignment's own instructions state. */
+  gradeOnlyStatedRequirements: true,
+  /** Minimum share of correct answers (0–1) for each grade on closed exercises. */
+  closedExerciseThresholds: { A: 0.9, B: 0.75, C: 0.6, D: 0.45, E: 0.3 },
 } as const;
+
+/** Grade for a closed exercise from the share of correct answers (0–1). */
+export function closedExerciseGrade(share: number): "A" | "B" | "C" | "D" | "E" | "F" {
+  const t = CLASSROOM_ASSESSMENT.closedExerciseThresholds;
+  if (share >= t.A) return "A";
+  if (share >= t.B) return "B";
+  if (share >= t.C) return "C";
+  if (share >= t.D) return "D";
+  if (share >= t.E) return "E";
+  return "F";
+}
 
 export function year7AssessmentPrompt(): string {
   const policy = CLASSROOM_ASSESSMENT;
+  const t = policy.closedExerciseThresholds;
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
   return `ASSESSMENT CONTEXT:
 - Subject: ${policy.subject}, Swedish grundskola årskurs ${policy.schoolYear}, ${policy.curriculum}. Not svenska som andraspråk and not a CEFR language exam.
-- There are no separate national year-7 criteria. Use the Swedish year-${policy.referenceCriteriaYear} criteria proportionately to year 7, the current task, and content actually taught/practised. Do not demand end-of-year-9 achievement.
+- The pupil is about 13. Grade like a fair, supportive årskurs ${policy.schoolYear} teacher grading a normal pupil — NOT like a teacher in årskurs 9, and not like an adult writer. Use the Swedish year-${policy.referenceCriteriaYear} criteria only proportionately to year ${policy.schoolYear} and to what has actually been taught/practised.
 - Give an assignment-level practice grade, never claim to determine the official subject/term grade. Assess only evidence this task can show; an absent oral task is not failed oral competence.
-- E: understandable, mainly coherent writing with simple variation, a basically functioning structure and some adaptation to purpose/reader; mainly functioning language conventions. Basic reading comprehension with simple, relevant reasoning and support from the text. Simple reasoning about source credibility/relevance where asked.
-- C: relatively good variation and coherence, a functioning structure, relatively good adaptation and language conventions. Good reading comprehension with developed reasoning and relevant textual examples. Developed reasoning about sources where asked.
-- A: good variation and coherence, a well-functioning structure, good adaptation and language conventions. Very good reading comprehension with well-developed, nuanced reasoning supported by relevant examples. Well-developed reasoning about sources where asked. These qualities are judged at year-7 depth, not advanced literary or adult academic level.
-- B: evidence overall best matches a level between A and C. D: evidence overall best matches a level between C and E. Use a qualitative overall judgement, not fixed percentages or an arithmetic mean of rubric letters.
-- F: submitted work does not demonstrate E-level quality for the assessed task. No submitted work or too little evidence to assess is NOT automatically F: ask for the missing work and do not emit a grade marker.
-- Closed grammar/vocabulary exercises: explain actual errors and what understanding they show; the result is practice evidence, not an official subject grade. Accept all grammatically valid answers fitting the context, not only the answer-key wording.
-- A does not require error-free work. Weigh recurring errors by their effect on clarity, structure and the skill being assessed. Do not apply an automatic grade ceiling for word count, missing decorative techniques, optional advanced terminology or an isolated spelling error.
-- A concise but well-supported answer may demonstrate high quality. Length alone and adult sophistication must not earn or prevent a grade. Treat rigid requirements for sonnets, villanelles, enjambment, complex rhetoric or exact formal letter layout as extension practice, not prerequisites for a passing or high year-7 grade.
-- Feedback: identify demonstrated strengths, explain the chosen grade using relevant criteria, and give one concrete next step. Never invent evidence, sources or student performance.`;
+
+GRADING CALIBRATION (follow this closely — earlier grading was too strict):
+- A solid, honest attempt by a typical year-7 pupil that meets the stated requirements and mostly works = C or B. A = clearly strong work for year 7. E = understandable and on task but simple or with many slips. Do NOT treat C as "bad".
+- D means clearly weak: a lot is missing or wrong, or mistakes often make the work hard to understand. Never give D for work that is mostly correct. F only when the work does not reach E-level for the task.
+- Closed exercises (grammar, vocabulary, translation, word classes, fill in the blanks, conjugation): count correct answers. Count a valid answer as correct even if it differs from the answer key. Give half credit for answers that are partly right (right idea, small slip). Then use roughly: A from ${pct(t.A)}, B from ${pct(t.B)}, C from ${pct(t.C)}, D from ${pct(t.D)}, E from ${pct(t.E)}, F below that.
+- Open writing (story, letter, text, dialogue, poem, summaries, short answers): judge the whole text. E: understandable, on topic, roughly the right length, basic structure. C: clear and mostly well organised, mostly correct language, some variation, relevant ideas. A: well developed, flows well, good adaptation to the task, language mostly correct with only minor slips. B sits between A and C, D between C and E. Use a qualitative overall judgement, not an arithmetic average of parts.
+- Only grade against what the assignment's instructions actually ask for. Extra techniques, "advanced" devices, a rigid layout or a particular style are NOT required and must never lower the grade. Do not invent extra requirements.
+- Spelling and punctuation slips matter only when they hurt readability or are the skill being practised. Informal wording is fine unless the task is formal. A concise but good answer can still earn a high grade; length alone neither earns nor prevents a grade.
+- A does not require error-free work. Weigh recurring errors by their effect on clarity and on the skill being assessed. If the length requirement is missed by a small margin, mention it but do not lower the grade by more than one step.
+- When the evidence sits between two grades, give the higher grade.
+- Too little to assess (almost nothing submitted) is NOT automatically F: ask for the missing work and do not emit a grade marker.
+- Feedback: start with what worked, name the one or two most useful errors with a short explanation and the correct form, and end with one concrete next step. Keep it warm and honest. Never invent evidence, sources or pupil performance.`;
 }

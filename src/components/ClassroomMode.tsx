@@ -78,67 +78,69 @@ function saveKey(k:string){try{localStorage.setItem(KEY_STORE,k)}catch{/**/}}
 function loadProg():Progress{try{const r=localStorage.getItem(PROG_STORE);return r?JSON.parse(r):{grades:[],currentTerm:1}}catch{return{grades:[],currentTerm:1}}}
 function saveProg(p:Progress){try{localStorage.setItem(PROG_STORE,JSON.stringify(p))}catch{/**/}}
 
-// ── Assignment prompts (Y7/8, B1+) ───────────────────────────────────────────
+// ── Assignment prompts (årskurs 7 — realistic level, open tasks give freedom) ──
+
+const LEVEL=`Level: Swedish grundskola årskurs 7 (13-year-olds). Use everyday topics a 13-year-old knows (school, friends, sport, games, family, hobbies, social media, nature). Normal classroom difficulty — not tricks, not rare grammar.`;
 
 const TMETA:Record<AT,{label:string;gen:string}>={
-  circle_verb:{label:"Hitta verben",gen:`Y7/8 Swedish B1: paragraph (8–10 sentences) on technology/climate/society with 12–15 verbs: modals (kan/måste/bör/vill/ska), perfect (har/hade + supinum), s-passive, verbs in bisatser. Student must identify ALL including auxiliaries. Return ONLY valid JSON:
-{"type":"circle_verb","title":"Hitta ALLA verb","instructions":"Klicka på alla verb — inklusive hjälpverb, s-passiv och verb i bisatser. Det finns [N] verb totalt.","text":"PARAGRAPH","answer_key":"All verbs listed"}`},
+  circle_verb:{label:"Hitta verben",gen:`${LEVEL} Write a short Swedish paragraph (6–8 sentences) with 10–12 verbs, including a few modal verbs + infinitive (kan/måste/ska/vill) and a few perfect forms (har/hade + supinum). Return ONLY valid JSON:
+{"type":"circle_verb","title":"Hitta verben","instructions":"Klicka på alla verb i texten. Det finns [N] verb totalt.","text":"PARAGRAPH","answer_key":"All verbs listed"}`},
 
-  correct_mistakes:{label:"Rätta felen",gen:`Y7/8 Swedish: paragraph (8–10 sentences) with exactly 10 subtle errors: adjective agreement (stark/starkt/starka), V2 violation in main clause, wrong participle form, wrong reflexive pronoun, s-passiv error, wrong preposition, bisats word order error (verb before subject), wrong subjunktion, missing hyphen in compound word, wrong genus. Return ONLY valid JSON:
-{"type":"correct_mistakes","title":"Rätta de 10 felen","instructions":"Texten innehåller exakt 10 grammatiska fel. Skriv den korrekta versionen och förklara kortfattat varje ändring.","text":"PARAGRAPH WITH 10 ERRORS","answer_key":"CORRECTED + explanation of each error"}`},
+  correct_mistakes:{label:"Rätta felen",gen:`${LEVEL} Write a Swedish paragraph (6–8 sentences) and put in about 8 typical pupil mistakes: wrong verb form, adjective agreement, word order after a time word or in a bisats, en/ett, wrong preposition, a compound word written apart. Count only the errors you really put in and use that same number in the instructions. Return ONLY valid JSON:
+{"type":"correct_mistakes","title":"Rätta felen","instructions":"Texten innehåller [N] fel. Skriv en rättad version av texten.","text":"PARAGRAPH WITH ERRORS","answer_key":"CORRECTED TEXT + short list of each error"}`},
 
-  reading_comprehension:{label:"Läsförståelse",gen:`Y7/8 Swedish B1: 250-word text on nuanced topic (migration, AI ethics, climate justice, mental health) with clear authorial stance. 6 questions: 2 literal, 2 inference (Vad antyder...?), 1 on text structure/purpose, 1 own opinion with textual evidence. Return ONLY valid JSON:
-{"type":"reading_comprehension","title":"Läsförståelse och textanalys","instructions":"Läs texten noggrant. Svara i fullständiga meningar och motivera med belägg från texten.","text":"TEXT","questions":["Q1","Q2","Q3","Q4","Q5","Q6"],"answer_key":"Detailed model answers"}`},
+  reading_comprehension:{label:"Läsförståelse",gen:`${LEVEL} Write a Swedish text of about 200 words on an interesting topic for 13-year-olds. Add 5 questions: 2 where the answer is in the text, 2 asking why/what the text means, 1 asking for the pupil's own opinion. Return ONLY valid JSON:
+{"type":"reading_comprehension","title":"Läsförståelse","instructions":"Läs texten och svara på frågorna med egna ord.","text":"TEXT","questions":["Q1","Q2","Q3","Q4","Q5"],"answer_key":"Short model answers; other reasonable answers are fine"}`},
 
-  write_story:{label:"Skriv en berättelse",gen:`Y7/8 Swedish creative writing. Vivid, unexpected scenario. Requirements: min 350 ord, miljöbeskrivning med 3 sinnesintryck, inre monolog, 2+ dialoger med korrekt interpunktion, ett tidshopp eller perspektivskifte, varierande meningslängd. Return ONLY valid JSON:
-{"type":"write_story","title":"Skriv en berättelse","instructions":"Min 350 ord. Måste innehålla: miljöbeskrivning med minst 3 sinnesintryck, inre monolog, minst 2 dialoger (korrekt interpunktion), ett tidshopp ELLER perspektivskifte, och variation i meningslängd.","prompt":"Specific vivid opening sentence or scenario hook","answer_key":"Rubric: struktur/miljöbeskrivning/dialog/inre monolog/språklig variation (A–F each)"}`},
+  write_story:{label:"Skriv en berättelse",gen:`${LEVEL} Give the pupil a free creative writing task. Only ask for a length of at least 250 words. The prompt is just an open starting point (an opening sentence or a short situation) — the pupil decides what happens. Return ONLY valid JSON:
+{"type":"write_story","title":"Skriv en berättelse","instructions":"Skriv en berättelse på minst 250 ord. Du bestämmer själv hur den utvecklas. Försök ha med lite dialog och beskriv miljön.","prompt":"Open starting sentence or short situation","answer_key":"Free task. Grade on idea, structure, language and how the story hangs together. Any reasonable story is fine."}`},
 
-  kallkritik:{label:"Källkritik",gen:`Y7/8 Swedish: convincing 160-word fake article/post with: unnamed/biased source, cherry-picked stats, emotional manipulation, missing counter-arguments, sensationalist headline. 5 questions applying SVAR (Sändare/Vinkel/Avsikt/Relevans) + identify rhetorical strategies (pathos/ethos/logos). Return ONLY valid JSON:
-{"type":"kallkritik","title":"Källkritisk analys — SVAR-modellen","instructions":"Analysera källan med SVAR-modellen och svara på alla fem frågorna.","text":"CONVINCING FAKE ARTICLE","questions":["Vem är sändaren och hur påverkar det trovärdigheten?","Vilken vinkel har texten och vad utelämnas medvetet?","Vad är textens troliga avsikt?","Identifiera ett exempel på pathos, ethos eller logos i texten.","Hur skulle du verifiera påståendena — nämn 2 konkreta metoder."],"answer_key":"Detailed model answers"}`},
+  kallkritik:{label:"Källkritik",gen:`${LEVEL} Write a short Swedish social-media post or news item (about 120 words) that is somewhat one-sided or exaggerated (for example a miracle product, a clickbait claim or a rumour). Add 4 questions. Return ONLY valid JSON:
+{"type":"kallkritik","title":"Källkritik","instructions":"Läs texten och svara på frågorna.","text":"THE POST OR ARTICLE","questions":["Vem tror du har skrivit texten, och kan man lita på avsändaren?","Vad vill texten att läsaren ska tycka eller göra?","Finns det något i texten som verkar överdrivet eller saknas?","Hur skulle du kontrollera om det stämmer?"],"answer_key":"Short model answers; other reasonable answers are fine"}`},
 
-  fill_blank:{label:"Fyll i luckorna",gen:`Y7/8 Swedish advanced grammar: 8 sentences with blanks for: subjunktioner (att/eftersom/fast/trots att/för att+infinitiv), prepositioner in fixed phrases, adjective agreement, reflexiva pronomen (sig/mig/dig), particip forms. Word bank: correct + 4 plausible distractors. Return ONLY valid JSON:
-{"type":"fill_blank","title":"Avancerade luckor — grammatik","instructions":"Välj rätt ord från ordbanken. Tänk på: adjektivkongruens, prepositioner i fasta fraser, reflexiva pronomen och subjunktioner.","text_with_blanks":"S1 with ___.\nS2 with ___.","word_bank":["w1","w2","w3","w4","w5","w6","w7","w8","d1","d2","d3","d4"],"answer_key":"1. word (grammatical reason)\n..."}`},
+  fill_blank:{label:"Fyll i luckorna",gen:`${LEVEL} Write 8 Swedish sentences, each with one blank (___). Blanks test common things: conjunctions/subjunctions (och, men, att, eftersom, när), common prepositions, adjective agreement, sig/mig/dig. Word bank: the 8 correct words + 3 plausible wrong ones. Return ONLY valid JSON:
+{"type":"fill_blank","title":"Fyll i luckorna","instructions":"Välj rätt ord från ordbanken. Varje ord används en gång.","text_with_blanks":"S1 with ___.\nS2 with ___.","word_bank":["w1","w2","w3","w4","w5","w6","w7","w8","d1","d2","d3"],"answer_key":"1. word\n2. word\n..."}`},
 
-  translate_sentences:{label:"Översätt meningarna",gen:`Y7/8 Swedish: 8 complex English→Swedish sentences with: subordinate clauses (since/although/whether), passive voice, V2 rule challenges, idiomatic expressions unique to Swedish. No simple sentences. Return ONLY valid JSON:
-{"type":"translate_sentences","title":"Översätt — komplexa meningar","instructions":"Översätt till svenska. Tänk på bisatser, V2-regeln, passiv form och idiomatiska uttryck som inte kan översättas ord för ord.","sentences":["Complex S1","Complex S2","...8 total"],"answer_key":"1. Swedish + note on tricky part\n..."}`},
+  translate_sentences:{label:"Översätt meningarna",gen:`${LEVEL} Write 6 English sentences to translate into Swedish: everyday sentences of normal length, a couple of them with because/but/that. Return ONLY valid JSON:
+{"type":"translate_sentences","title":"Översätt till svenska","instructions":"Översätt meningarna till svenska.","sentences":["S1","S2","S3","S4","S5","S6"],"answer_key":"1. one possible Swedish translation\n... (other correct translations should also be accepted)"}`},
 
-  word_class:{label:"Ordklasser",gen:`Y7/8 Swedish: 14 words from difficult classes: presensparticip, perfektparticip, konjunktion, subjunktion, interjektion, possessivt pronomen, reflexivt pronomen, partikel, räkneord. Not just basic nouns/verbs. Return ONLY valid JSON:
-{"type":"word_class","title":"Ordklasser — avancerade","instructions":"Ange exakt ordklass: substantiv, verb, adjektiv, adverb, pronomen, preposition, konjunktion, subjunktion, interjektion, particip, räkneord, partikel.","words":["w1","w2","...w14"],"answer_key":"1. word = klass (kort motivering)\n..."}`},
+  word_class:{label:"Ordklasser",gen:`${LEVEL} Write a short Swedish text of 3–4 sentences, then list 12 words from it from different word classes (substantiv, verb, adjektiv, adverb, pronomen, preposition, konjunktion, räkneord). Only use classes pupils in årskurs 7 have learned. Return ONLY valid JSON:
+{"type":"word_class","title":"Ordklasser","instructions":"Vilken ordklass tillhör varje ord i texten? Skriv t.ex. substantiv, verb, adjektiv, adverb, pronomen, preposition, konjunktion eller räkneord.","text":"THE SHORT TEXT","words":["w1","w2","...12 words"],"answer_key":"1. word = klass\n..."}`},
 
-  reorder_sentences:{label:"Ordna meningarna",gen:`Y7/8 Swedish: 8 sentences forming a complex narrative with non-obvious order. Include temporal markers (Dessförinnan/Strax därefter/Till slut) and pronoun references that require careful reading. Return ONLY valid JSON:
-{"type":"reorder_sentences","title":"Ordna händelseförloppet","instructions":"Sätt de 8 meningarna i rätt ordning. Läs noga — tidmarkörer och pronomenreferenser avslöjar ordningen. Svar som siffror t.ex. 3,7,1,5,2,8,4,6.","sentences":["S1","S2","S3","S4","S5","S6","S7","S8"],"answer_key":"Correct order + explanation of each clue"}`},
+  reorder_sentences:{label:"Ordna meningarna",gen:`${LEVEL} Write 6 short Swedish sentences that make up a small story or a set of everyday instructions with a clear order (use words like först, sedan, efter det, till sist). List them in the correct order. Return ONLY valid JSON:
+{"type":"reorder_sentences","title":"Ordna meningarna","instructions":"Meningarna är blandade. Skriv numren i rätt ordning, t.ex. 3,1,2,6,5,4.","sentences":["S1","S2","S3","S4","S5","S6"],"answer_key":"Write the six sentences in the correct order, full text, one per line, each with a short clue why it goes there"}`},
 
-  conjugate_verbs:{label:"Böj verben",gen:`Y7/8 Swedish: 8 verbs from groups 1,2a,2b,3,4(irregular) + 2 s-verbs (hoppas/minnas). 5 forms: infinitiv, presens, preteritum, perfekt, pluskvamperfekt. Return ONLY valid JSON:
-{"type":"conjugate_verbs","title":"Verbkonjugation — alla fem former","instructions":"Fyll i alla fem former: infinitiv, presens, preteritum, perfekt (har+), pluskvamperfekt (hade+). Tänk på verbgrupp.","verbs":["att skriva","att springa","att köpa","att hoppas","att simma","att be","att veta","att minnas"],"answer_key":"att skriva: skriva/skriver/skrev/har skrivit/hade skrivit\n..."}`},
+  conjugate_verbs:{label:"Böj verben",gen:`${LEVEL} Choose 6 common verbs: two from group 1, one each from groups 2, 3 and 4 (irregular), and one s-verb (t.ex. hoppas/finnas). Return ONLY valid JSON:
+{"type":"conjugate_verbs","title":"Böj verben","instructions":"Fyll i presens, preteritum, perfekt och pluskvamperfekt för varje verb.","verbs":["att skriva","att leka","att köpa","att tro","att springa","att hoppas"],"answer_key":"att skriva: skriver / skrev / har skrivit / hade skrivit\n..."}`},
 
-  en_ett:{label:"En eller ett?",gen:`Year 7 Swedish en/ett: 14 nouns, good mix of en and ett words including some tricky ones. Shuffle them randomly — do NOT group en-words together or ett-words together, they must be interleaved. Return ONLY valid JSON:
-{"type":"en_ett","title":"En eller ett?","instructions":"Välj rätt artikel (en eller ett) för varje substantiv.","words":["hus","bil","barn","skola","bord","lampa","träd","dator","klass","lärare","fönster","bok","hjärta","tid"],"answer_key":"ett hus, en bil, ett barn, en skola, ett bord, en lampa, ett träd, en dator, en klass, en lärare, ett fönster, en bok, ett hjärta, en tid"}`},
+  en_ett:{label:"En eller ett?",gen:`Year 7 Swedish en/ett: 12 common nouns, a good mix of en and ett words, a few slightly tricky ones. Shuffle them so en-words and ett-words are mixed. Return ONLY valid JSON:
+{"type":"en_ett","title":"En eller ett?","instructions":"Välj rätt artikel (en eller ett) för varje substantiv.","words":["hus","bil","barn","skola","bord","lampa","träd","dator","klass","lärare","fönster","bok"],"answer_key":"ett hus, en bil, ett barn, en skola, ett bord, en lampa, ett träd, en dator, en klass, en lärare, ett fönster, en bok"}`},
 
-  write_letter:{label:"Skriv ett brev",gen:`Y7/8 Swedish formal letter. High-stakes realistic scenario: complaint to municipality/school board, formal application, letter to editor, appeal to principal. Min 220 ord. Must follow Swedish formal letter format exactly, professional register (no contractions, correct tilltal), 4+ paragraphs with clear purpose progression. Return ONLY valid JSON:
-{"type":"write_letter","title":"Formellt brev","instructions":"Min 220 ord. Följ exakt brevformat: datum, avsändare, mottagare, formell hälsningsfras. Formellt register: inga förkortningar, korrekt tilltal (Ni/du). 4+ stycken med tydlig progression. Formell avslutningsfras.","prompt":"Detailed high-stakes realistic scenario","answer_key":"Rubric: format/register/innehåll-argumentation/grammatik (A–F each)"}`},
+  write_letter:{label:"Skriv ett brev",gen:`${LEVEL} Give the pupil a realistic letter or e-mail task, either formal or informal (for example asking the school for something, applying for a holiday job or a club, a letter to a relative, or a short letter to the editor). Only ask for a length of at least 150 words. Keep the requirements light. Return ONLY valid JSON:
+{"type":"write_letter","title":"Skriv ett brev","instructions":"Skriv ett brev eller ett mejl på minst 150 ord. Tänk på vem du skriver till och hur du ska låta. Du bestämmer själv vad du vill ta upp.","prompt":"Short realistic situation (who to write to and why)","answer_key":"Free task. Grade on whether the purpose and receiver are clear, a suitable tone, structure and language. Do not require a rigid letter layout."}`},
 
-  argumentative_text:{label:"Argumenterande text",gen:`Y7/8 Swedish: genuinely controversial debatable topic. Must include: tes (clear thesis in intro), 3 arguments with konkreta belägg (evidence/examples), ett motargument med bemötande (counter-argument + rebuttal), slutsats referencing thesis. Min 300 ord, formal language. Return ONLY valid JSON:
-{"type":"argumentative_text","title":"Argumenterande text","instructions":"Min 300 ord, formellt språk. MÅSTE innehålla: tes i inledning, 3 argument med konkreta belägg, ETT motargument med bemötande, och en slutsats som återknyter till tesen. Betygsmaxpoäng kräver att alla delar är genomarbetade.","prompt":"Controversial debate question worth arguing","answer_key":"Rubric: tes/argumentkvalitet+belägg/motargument+bemötande/formalitet/struktur (A–F each)"}`},
+  argumentative_text:{label:"Argumenterande text",gen:`${LEVEL} Give the pupil a debate question that 13-year-olds have opinions about (for example school phones, homework, screen time, pocket money, school lunches). Only ask for at least 200 words and that the pupil gives their opinion with reasons. Return ONLY valid JSON:
+{"type":"argumentative_text","title":"Vad tycker du?","instructions":"Skriv en text på minst 200 ord där du säger din åsikt och förklarar varför. Använd gärna exempel. Du väljer själv hur du bygger upp texten.","prompt":"Debate question","answer_key":"Free task. Grade on a clear opinion, reasons with examples, structure and language. A counter-argument is a bonus, not a requirement."}`},
 
-  find_synonyms:{label:"Synonymer & nyanser",gen:`Y7/8 Swedish: 8 words. For each: synonym + antonym + explain register/nuance difference (e.g. "arg" vs "upprörd" — more formal, stronger emotion). Include words with deceptive synonyms where meaning subtly shifts. Return ONLY valid JSON:
-{"type":"find_synonyms","title":"Synonymer, antonymer och nyansskillnader","instructions":"För varje ord: skriv ett synonym, ett antonym, och förklara kort nyansskillnaden mellan ordet och dess synonym (register, styrka, konnotation, formellt/informellt).","words":["glad","snabb","stor","gammal","varm","lång","tyst","lätt"],"answer_key":"glad: syn=lycklig(mer intensivt/positivt), ant=ledsen; ..."}`},
+  find_synonyms:{label:"Synonymer",gen:`${LEVEL} Choose 8 common Swedish adjectives or verbs. Pupils write one synonym (word with similar meaning) and one antonym (opposite) for each. Return ONLY valid JSON:
+{"type":"find_synonyms","title":"Synonymer och motsatser","instructions":"Skriv ett synonym och ett motsatsord till varje ord. Du får gärna förklara om orden skiljer sig lite i betydelse.","words":["glad","snabb","stor","gammal","varm","lång","tyst","lätt"],"answer_key":"glad: syn=lycklig/nöjd, ant=ledsen; ... (accept all reasonable synonyms and antonyms)"}`},
 
   correct_punctuation:{label:"Rätta skiljetecknen",gen:punctuationAssignmentPrompt()},
 
-  summarize:{label:"Sammanfatta & analysera",gen:`Y7/8 Swedish: 280-word argumentative text with clear authorial perspective/agenda. 5 tasks: 1) summary 60–80 words, 2) identify syfte, 3) tonfall with textual evidence, 4) perspektiv (whose POV, what's excluded), 5) one rhetorical technique identified and explained. Return ONLY valid JSON:
-{"type":"summarize","title":"Sammanfatta och analysera text","instructions":"Utför ALLA fem uppgifterna:","text":"COMPLEX ARGUMENTATIVE TEXT WITH CLEAR STANCE","questions":["1. Sammanfatta texten i 60–80 ord med egna ord.","2. Vad är textens syfte?","3. Vilket tonfall har texten? Ge ett konkret belägg.","4. Ur vilket perspektiv är texten skriven — vad utelämnas medvetet?","5. Identifiera en retorisk teknik och förklara hur den används."],"answer_key":"Detailed model answers for all 5"}`},
+  summarize:{label:"Sammanfatta & analysera",gen:`${LEVEL} Write a Swedish opinion or information text of about 200 words. Add 4 tasks. Return ONLY valid JSON:
+{"type":"summarize","title":"Sammanfatta och svara","instructions":"Läs texten och gör uppgifterna.","text":"THE TEXT","questions":["1. Sammanfatta texten med egna ord (ca 50 ord).","2. Vad är textens syfte — vill den informera, övertyga eller underhålla?","3. Hur tycker du att texten låter (t.ex. seriös, rolig, arg)? Ge ett exempel.","4. Vad tycker du själv om det texten säger?"],"answer_key":"Short model answers; other reasonable answers are fine"}`},
 
-  write_dialogue:{label:"Skriv en dialog",gen:`Y7/8 Swedish: complex scenario with power imbalance or conflict. Requirements: 16+ repliker, distinct character voices (different registers), subtext (important things NOT said directly), 2+ scenanvisningar in italics, correct Swedish dialogue punctuation (tankstreck —), one unexpected revelation mid-dialogue. Return ONLY valid JSON:
-{"type":"write_dialogue","title":"Skriv en realistisk dialog","instructions":"Skriv en dialog: 16+ repliker, tydligt distinkta röster (t.ex. formell vs informell), undertext (viktiga saker sägs inte direkt), minst 2 scenanvisningar i kursiv, korrekt dialogpunktuation (tankstreck, INGA citattecken), och ett oväntat avslöjande.","prompt":"High-stakes scenario with clear power dynamic or unresolved conflict","answer_key":"Rubric: replikantal/karaktärsstemma/undertext/scenanvisningar/interpunktion (A–F each)"}`},
+  write_dialogue:{label:"Skriv en dialog",gen:`${LEVEL} Give the pupil a free dialogue task. Only ask for at least 16 repliker and a few light extras. The prompt is a simple everyday situation or two characters and a setting — the pupil decides everything else, including how it ends. Do NOT require surprises, subtext, special character voices, or other specific techniques. Return ONLY valid JSON:
+{"type":"write_dialogue","title":"Skriv en dialog","instructions":"Skriv en dialog med minst 16 repliker. Du bestämmer själv vilka personerna är och hur det slutar. Använd tankstreck (–) för repliker, och gärna några scenanvisningar.","prompt":"Simple everyday situation or two characters in a place","answer_key":"Free task. Grade on at least 16 repliker, a dialogue that works and is easy to follow, dialogue punctuation, and language. Any reasonable idea is fine."}`},
 
-  plural_forms:{label:"Pluralformer",gen:`Y7/8 Swedish: 14 nouns including all 5 declension groups + tricky cases: loanwords (-or/-ar/-er?), compounds, words with identical singular/plural, truly irregular (man/män, mus/möss, fot/fötter). 4 forms each: obestämd sg, bestämd sg, obestämd pl, bestämd pl. Return ONLY valid JSON:
-{"type":"plural_forms","title":"Alla fyra böjningsformer","instructions":"Skriv ALLA fyra former: obestämd singular, bestämd singular, obestämd plural, bestämd plural. Sammansatta ord och lånord är extra knepiga!","sentences":["en bil","ett hus","en flicka","ett barn","en man","en mus","en journalist","ett problem","en tid","ett öga","en lärare","ett museum","en hand","en middag"],"answer_key":"en bil / bilen / bilar / bilarna\n..."}`},
+  plural_forms:{label:"Pluralformer",gen:`${LEVEL} Choose 10 common Swedish nouns: a mix of the declensions, plus a couple of irregular ones (man/män, fot/fötter) and one word that is the same in singular and plural (t.ex. ett barn — barn). Pupils write all four forms. Return ONLY valid JSON:
+{"type":"plural_forms","title":"Böj substantiven","instructions":"Skriv obestämd singular, bestämd singular, obestämd plural och bestämd plural för varje ord.","sentences":["en bil","ett hus","en flicka","ett barn","en man","en lärare","ett öga","en hand","ett problem","en dag"],"answer_key":"en bil / bilen / bilar / bilarna\n..."}`},
 
-  past_tense:{label:"Preteritum & pluskvamperfekt",gen:`Y7/8 Swedish: 8 present-tense sentences. Student rewrites in BOTH preteritum AND pluskvamperfekt, plus brief explanation of when pluskvamperfekt is used. Include group-4 irregular verbs, s-verbs, vowel-change verbs. Return ONLY valid JSON:
-{"type":"past_tense","title":"Preteritum och pluskvamperfekt","instructions":"Skriv om i preteritum OCH pluskvamperfekt. Förklara kort när pluskvamperfekt används (handling som avslutats FÖRE en annan dåtidshandling).","sentences":["Pres S1 with irregular verb","Pres S2","...8 total incl irregular + s-verbs"],"answer_key":"S1: Pret: ... / Pluskv: ...\nPlusvamperfekt används när: ..."}`},
+  past_tense:{label:"Dåtid",gen:`${LEVEL} Write 6 present-tense Swedish sentences with common verbs (include a couple of irregular verbs). Pupils rewrite each in preteritum and in pluskvamperfekt. Return ONLY valid JSON:
+{"type":"past_tense","title":"Skriv i dåtid","instructions":"Skriv om varje mening i preteritum och i pluskvamperfekt.","sentences":["S1","S2","S3","S4","S5","S6"],"answer_key":"1. Pret: ... / Pluskv: ...\n..."}`},
 
-  write_poem:{label:"Skriv en dikt",gen:`Y7/8 Swedish advanced poetry. Required form (pick one): sonet (14 rader, ABAB CDCD EFEF GG), villanell (19 rader med refräng), or structured free verse with clear arc. Requirements: 2+ original non-clichéd metaforer, allitteration, enjambment, one paradox or oxymoron, 14+ rader. After poem: 3-sentence poetisk analys explaining 2 conscious compositional choices. Return ONLY valid JSON:
-{"type":"write_poem","title":"Avancerad dikt med poetisk analys","instructions":"Skriv en dikt (14+ rader). MÅSTE ha: 2 originella metaforer (inga klichéer), allitteration, enjambment, ett paradox ELLER oxymoron. Välj form: sonet, villanell eller strukturerad fri vers. Bifoga 3 meningars poetisk analys av dina medvetna val.","prompt":"Abstract or challenging theme (identity, time, belonging, loss, transformation, memory)","answer_key":"Rubric: bildspråk-originalitet/formteknik/rytm-enjambment/analys (A–F each)"}`,
+  write_poem:{label:"Skriv en dikt",gen:`${LEVEL} Give the pupil a free poem task. Any form is fine (rhyming or not). Only ask for at least 8 rader. The prompt is just an open theme. Return ONLY valid JSON:
+{"type":"write_poem","title":"Skriv en dikt","instructions":"Skriv en dikt på minst 8 rader. Den får rimma eller inte — du väljer själv form och stil.","prompt":"Open theme (for example hösten, vänskap, natten, ett minne)","answer_key":"Free task. Grade on how the poem expresses the theme, imagery and word choice, and effort. Any reasonable poem is fine."}`,
   },
 };
 
@@ -388,6 +390,9 @@ function AssignmentView({a,onAnswer}:{a:Assign;onAnswer:(s:string)=>void}){
       {["translate_sentences","reorder_sentences","plural_forms","past_tense"].includes(a.type)&&a.sentences&&(
         <ol className="flex flex-col gap-2 pl-4">{a.sentences.map((s,i)=><li key={i} className="text-lg list-decimal">{s}</li>)}</ol>
       )}
+      {["word_class","find_synonyms"].includes(a.type)&&a.words&&(
+        <ul className="flex flex-wrap gap-2">{a.words.map((w,i)=><li key={i} className="rounded-sm border-2 border-border bg-secondary/40 px-3 py-1 text-lg">{w}</li>)}</ul>
+      )}
       {a.prompt&&(
         <div className="rounded-sm border-l-4 border-accent bg-secondary/40 px-4 py-3 text-lg italic">{a.prompt}</div>
       )}
@@ -455,7 +460,7 @@ export function ClassroomMode({onExit}:{onExit:()=>void}){
 
   function teacherSys(){
     if(!assignment)return"";
-    return`You are Läraren, a firm but encouraging Swedish teacher for årskurs 7.
+    return`You are Läraren, a fair, warm and encouraging Swedish teacher for årskurs 7 (13-year-olds). You grade the way a normal, realistic årskurs 7 teacher does: you reward what works and you do not look for reasons to lower the grade.
 
 ${year7AssessmentPrompt()}
 ${assignment.type === "correct_punctuation" ? punctuationGuidance() : ""}
@@ -465,7 +470,11 @@ Type: ${TMETA[assignment.type].label}
 Title: ${assignment.title}
 Instructions: ${assignment.instructions}
 ${assignment.text?`Text: ${assignment.text}`:""}
-${assignment.sentences?`Sentences: ${assignment.sentences.join(" | ")}`:""}
+${assignment.sentences?`Sentences: ${assignment.sentences.map((x,i)=>`${i+1}. ${x}`).join(" | ")}`:""}
+${assignment.words?`Words: ${assignment.words.join(", ")}`:""}
+${assignment.verbs?`Verbs: ${assignment.verbs.join(", ")}`:""}
+${assignment.word_bank?`Word bank: ${assignment.word_bank.join(", ")}`:""}
+${assignment.text_with_blanks?`Text with blanks: ${assignment.text_with_blanks}`:""}
 ${assignment.questions?`Questions: ${assignment.questions.join(" | ")}`:""}
 ${assignment.prompt?`Prompt: ${assignment.prompt}`:""}
 ANSWER KEY (secret — only use for grading): ${assignment.answer_key}
@@ -475,10 +484,10 @@ ${answer||(msgs.length?"(se tidigare svar)":"(inget svar ännu)")}
 
 RULES:
 - Speak Swedish. Use English only if student writes in English.
-- Give hints without revealing answers. Challenge the student.
+- Give hints without revealing answers.
 - When grading (betyg/grade requested): follow the ASSESSMENT CONTEXT above over any conflicting answer-key rubric or task requirements. Give an honest A–F practice grade with feedback on criteria relevant to this task. Only when there is sufficient submitted work, end response with EXACTLY this on its own line: [BETYG: X]
 - When correcting (rätta): show what was wrong, why, and the correct version.
-- Hold students to the year-7 expectations above. If work is insufficient, explain the next step clearly.
+- Grade realistically for årskurs 7, using the GRADING CALIBRATION above. Only require what the instructions actually say; never add extra requirements of your own. If the work is clearly too short or off-task, say what is missing and what to do next.
 - Keep responses focused (max 8 sentences unless grading).`;
   }
 

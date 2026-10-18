@@ -15,3 +15,21 @@ describe("requested Swedish årskurs 7 assessment", () => {
     assert.equal(CLASSROOM_ASSESSMENT.assessOnlyTaughtContent, true);
   });
 });
+import { closedExerciseGrade, year7AssessmentPrompt } from "./classroom-assessment";
+
+describe("realistic årskurs 7 grading", () => {
+  it("maps closed-exercise results to fair grades", () => {
+    assert.equal(closedExerciseGrade(1), "A");
+    assert.equal(closedExerciseGrade(0.8), "B");
+    assert.equal(closedExerciseGrade(0.65), "C");
+    assert.equal(closedExerciseGrade(0.5), "D");
+    assert.equal(closedExerciseGrade(0.35), "E");
+    assert.equal(closedExerciseGrade(0.1), "F");
+  });
+  it("grades only on stated requirements and rounds borderline cases up", () => {
+    assert.equal(CLASSROOM_ASSESSMENT.gradeOnlyStatedRequirements, true);
+    assert.equal(CLASSROOM_ASSESSMENT.borderlineGoesUp, true);
+    assert.match(year7AssessmentPrompt(), /GRADING CALIBRATION/);
+    assert.match(year7AssessmentPrompt(), /higher grade/);
+  });
+});
