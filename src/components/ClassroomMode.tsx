@@ -15,10 +15,10 @@ const TERM_LENGTH = 20;
 // ── Core types ────────────────────────────────────────────────────────────────
 
 const ALL_TYPES = [
-  "circle_verb","correct_mistakes","reading_comprehension","write_story",
-  "kallkritik","fill_blank","translate_sentences","word_class","reorder_sentences",
-  "conjugate_verbs","en_ett","write_letter","argumentative_text","find_synonyms",
-  "correct_punctuation","summarize","write_dialogue","plural_forms","past_tense","write_poem",
+  "verbs","correct_mistakes","reading_comprehension","write_story",
+  "kallkritik","fill_blank","translate_sentences","word_class",
+  "en_ett","write_letter","argumentative_text","analyze_fiction","language_use",
+  "correct_punctuation","summarize","write_dialogue","plural_forms","write_poem",
 ] as const;
 type AT = (typeof ALL_TYPES)[number];
 type LG = "A"|"B"|"C"|"D"|"E"|"F";
@@ -33,16 +33,15 @@ const COMPS: Record<CK,string> = {
 };
 
 const CMAP: Record<AT,CK[]> = {
-  circle_verb:["F4"], correct_mistakes:["F4"], reading_comprehension:["F2"],
+  verbs:["F4"], correct_mistakes:["F4"], reading_comprehension:["F2"],
   write_story:["F1","F3"], kallkritik:["F5"], fill_blank:["F4"],
-  translate_sentences:["F3"], word_class:["F4"], reorder_sentences:["F4"],
-  conjugate_verbs:["F4"], en_ett:["F4"], write_letter:["F1","F3"],
-  argumentative_text:["F1","F3"], find_synonyms:["F4"], correct_punctuation:["F4"],
-  summarize:["F2"], write_dialogue:["F1","F3"], plural_forms:["F4"],
-  past_tense:["F4"], write_poem:["F1"],
+  translate_sentences:["F3"], word_class:["F4"], en_ett:["F4"],
+  write_letter:["F1","F3"], argumentative_text:["F1","F3"],
+  analyze_fiction:["F2"], language_use:["F3"], correct_punctuation:["F4"],
+  summarize:["F2"], write_dialogue:["F1","F3"], plural_forms:["F4"], write_poem:["F1"],
 };
 
-type GradeEntry = { id:string; type:AT; title:string; grade:LG; comps:CK[]; term:number; ts:number };
+type GradeEntry = { id:string; type:AT|string; title:string; grade:LG; comps:CK[]; term:number; ts:number };
 type Progress = { grades:GradeEntry[]; currentTerm:number };
 type Assign = {
   type:AT; title:string; instructions:string; answer_key:string;
@@ -83,9 +82,6 @@ function saveProg(p:Progress){try{localStorage.setItem(PROG_STORE,JSON.stringify
 const LEVEL=`Level: Swedish grundskola årskurs 7 (13-year-olds). Use everyday topics a 13-year-old knows (school, friends, sport, games, family, hobbies, social media, nature). Solid årskurs 7 difficulty: a real but fair challenge for a pupil who has been taught the standard årskurs 7 content — not trivial, not åk 9 level, no tricks or rare grammar.`;
 
 const TMETA:Record<AT,{label:string;gen:string}>={
-  circle_verb:{label:"Hitta verben",gen:`${LEVEL} Write a short Swedish paragraph (6–8 sentences) with 10–12 verbs, including a few modal verbs + infinitive (kan/måste/ska/vill) and a few perfect forms (har/hade + supinum). Return ONLY valid JSON:
-{"type":"circle_verb","title":"Hitta verben","instructions":"Klicka på alla verb i texten. Det finns [N] verb totalt.","text":"PARAGRAPH","answer_key":"All verbs listed"}`},
-
   correct_mistakes:{label:"Rätta felen",gen:`${LEVEL} Write a Swedish paragraph (6–8 sentences) and put in about 8 typical pupil mistakes: wrong verb form, adjective agreement, word order after a time word or in a bisats, en/ett, wrong preposition, a compound word written apart. Count only the errors you really put in and use that same number in the instructions. Return ONLY valid JSON:
 {"type":"correct_mistakes","title":"Rätta felen","instructions":"Texten innehåller [N] fel. Skriv en rättad version av texten.","text":"PARAGRAPH WITH ERRORS","answer_key":"CORRECTED TEXT + short list of each error"}`},
 
@@ -107,12 +103,6 @@ const TMETA:Record<AT,{label:string;gen:string}>={
   word_class:{label:"Ordklasser",gen:`${LEVEL} Write a short Swedish text of 3–4 sentences, then list 12 words from it from different word classes (substantiv, verb, adjektiv, adverb, pronomen, preposition, konjunktion, räkneord). Only use classes pupils in årskurs 7 have learned. Return ONLY valid JSON:
 {"type":"word_class","title":"Ordklasser","instructions":"Vilken ordklass tillhör varje ord i texten? Skriv t.ex. substantiv, verb, adjektiv, adverb, pronomen, preposition, konjunktion eller räkneord.","text":"THE SHORT TEXT","words":["w1","w2","...12 words"],"answer_key":"1. word = klass\n..."}`},
 
-  reorder_sentences:{label:"Ordna meningarna",gen:`${LEVEL} Write 6 short Swedish sentences that make up a small story or a set of everyday instructions with a clear order (use words like först, sedan, efter det, till sist). List them in the correct order. Return ONLY valid JSON:
-{"type":"reorder_sentences","title":"Ordna meningarna","instructions":"Meningarna är blandade. Skriv numren i rätt ordning, t.ex. 3,1,2,6,5,4.","sentences":["S1","S2","S3","S4","S5","S6"],"answer_key":"Write the six sentences in the correct order, full text, one per line, each with a short clue why it goes there"}`},
-
-  conjugate_verbs:{label:"Böj verben",gen:`${LEVEL} Choose 6 common verbs: two from group 1, one each from groups 2, 3 and 4 (irregular), and one s-verb (t.ex. hoppas/finnas). Return ONLY valid JSON:
-{"type":"conjugate_verbs","title":"Böj verben","instructions":"Fyll i presens, preteritum, perfekt och pluskvamperfekt för varje verb.","verbs":["att skriva","att leka","att köpa","att tro","att springa","att hoppas"],"answer_key":"att skriva: skriver / skrev / har skrivit / hade skrivit\n..."}`},
-
   en_ett:{label:"En eller ett?",gen:`Year 7 Swedish en/ett: 12 common nouns, a good mix of en and ett words, a few slightly tricky ones. Shuffle them so en-words and ett-words are mixed. Return ONLY valid JSON:
 {"type":"en_ett","title":"En eller ett?","instructions":"Välj rätt artikel (en eller ett) för varje substantiv.","words":["hus","bil","barn","skola","bord","lampa","träd","dator","klass","lärare","fönster","bok"],"answer_key":"ett hus, en bil, ett barn, en skola, ett bord, en lampa, ett träd, en dator, en klass, en lärare, ett fönster, en bok"}`},
 
@@ -121,9 +111,6 @@ const TMETA:Record<AT,{label:string;gen:string}>={
 
   argumentative_text:{label:"Argumenterande text",gen:`${LEVEL} Give the pupil a debate question that 13-year-olds have opinions about (for example school phones, homework, screen time, pocket money, school lunches). Only ask for at least 200 words and that the pupil gives their opinion with reasons. Return ONLY valid JSON:
 {"type":"argumentative_text","title":"Vad tycker du?","instructions":"Skriv en text på minst 200 ord där du säger din åsikt och förklarar varför. Använd gärna exempel. Du väljer själv hur du bygger upp texten.","prompt":"Debate question","answer_key":"Free task. Grade on a clear opinion, reasons with examples, structure and language. A counter-argument is a bonus, not a requirement."}`},
-
-  find_synonyms:{label:"Synonymer",gen:`${LEVEL} Choose 8 common Swedish adjectives or verbs. Pupils write one synonym (word with similar meaning) and one antonym (opposite) for each. Return ONLY valid JSON:
-{"type":"find_synonyms","title":"Synonymer och motsatser","instructions":"Skriv ett synonym och ett motsatsord till varje ord. Du får gärna förklara om orden skiljer sig lite i betydelse.","words":["glad","snabb","stor","gammal","varm","lång","tyst","lätt"],"answer_key":"glad: syn=lycklig/nöjd, ant=ledsen; ... (accept all reasonable synonyms and antonyms)"}`},
 
   correct_punctuation:{label:"Rätta skiljetecknen",gen:punctuationAssignmentPrompt()},
 
@@ -136,13 +123,20 @@ const TMETA:Record<AT,{label:string;gen:string}>={
   plural_forms:{label:"Pluralformer",gen:`${LEVEL} Choose 10 common Swedish nouns: a mix of the declensions, plus a couple of irregular ones (man/män, fot/fötter) and one word that is the same in singular and plural (t.ex. ett barn — barn). Pupils write all four forms. Return ONLY valid JSON:
 {"type":"plural_forms","title":"Böj substantiven","instructions":"Skriv obestämd singular, bestämd singular, obestämd plural och bestämd plural för varje ord.","sentences":["en bil","ett hus","en flicka","ett barn","en man","en lärare","ett öga","en hand","ett problem","en dag"],"answer_key":"en bil / bilen / bilar / bilarna\n..."}`},
 
-  past_tense:{label:"Dåtid",gen:`${LEVEL} Write 6 present-tense Swedish sentences with common verbs (include a couple of irregular verbs). Pupils rewrite each in preteritum and in pluskvamperfekt. Return ONLY valid JSON:
-{"type":"past_tense","title":"Skriv i dåtid","instructions":"Skriv om varje mening i preteritum och i pluskvamperfekt.","sentences":["S1","S2","S3","S4","S5","S6"],"answer_key":"1. Pret: ... / Pluskv: ...\n..."}`},
-
   write_poem:{label:"Skriv en dikt",gen:`${LEVEL} Give the pupil a free poem task. Any form is fine (rhyming or not). Only ask for at least 8 rader. The prompt is just an open theme. Return ONLY valid JSON:
 {"type":"write_poem","title":"Skriv en dikt","instructions":"Skriv en dikt på minst 8 rader. Den får rimma eller inte — du väljer själv form och stil.","prompt":"Open theme (for example hösten, vänskap, natten, ett minne)","answer_key":"Free task. Grade on how the poem expresses the theme, imagery and word choice, and effort. Any reasonable poem is fine."}`,
   },
+
+  verbs:{label:"Verbövning",gen:`${LEVEL} Make a three-part verb exercise. PART 1: a short Swedish paragraph (4–5 sentences) with 7–9 verbs, including one modal verb + infinitive (kan/måste/ska/vill) and one perfect form (har/hade + supinum). PART 2: 4 verbs to conjugate — one from group 1, one from group 2, one irregular verb from group 3/4, and one s-verb (hoppas/finnas/minnas). PART 3: 3 simple present-tense everyday sentences that the pupil rewrites in preteritum. Return ONLY valid JSON:
+{"type":"verbs","title":"Verbövning","instructions":"Del 1: Klicka på alla verb i texten. Del 2: Fyll i verbens former. Del 3: Skriv om meningarna i preteritum (dåtid).","text":"PARAGRAPH","verbs":["att skriva","att leka","att springa","att hoppas"],"sentences":["S1","S2","S3"],"answer_key":"DEL 1 – verb in the text: ...\nDEL 2 – att skriva: skriver / skrev / har skrivit / hade skrivit\n...\nDEL 3 – 1. ...\n2. ...\n3. ..."}`},
+
+  analyze_fiction:{label:"Analysera en berättelse",gen:`${LEVEL} Write a short ORIGINAL Swedish story (about 150–180 words, a complete mini-story or a strong opening) for 13-year-olds with a clear setting, one or two characters and a small conflict or turning point. Add 5 questions: (1) who is the main character and what is he/she like — support with something from the text; (2) where and when does it take place; (3) what is the problem or turning point; (4) what do you think the message or theme is; (5) one question about the narrator/point of view or a stylistic choice (for example how the writer creates suspense). Return ONLY valid JSON:
+{"type":"analyze_fiction","title":"Analysera en berättelse","instructions":"Läs berättelsen och svara på frågorna med egna ord. Stöd gärna dina svar med något från texten.","text":"THE STORY","questions":["Q1","Q2","Q3","Q4","Q5"],"answer_key":"Short model answers; other reasonable readings are fine"}`},
+
+  language_use:{label:"Språkbruk",gen:`${LEVEL} Write a short Swedish text (about 60 words) in very informal chat style, with slang, abbreviations and spoken-language features, for example a message from a friend. Add 3 tasks about language use. Return ONLY valid JSON:
+{"type":"language_use","title":"Språkbruk","instructions":"Läs texten och gör uppgifterna. Skriv med egna ord.","text":"THE INFORMAL TEXT","questions":["1. Vilka ord eller uttryck gör att texten känns informell? Ge minst tre exempel.","2. Skriv om texten så att den passar i ett mejl till en lärare.","3. Varför ändrar vi hur vi skriver beroende på vem som läser? Förklara med ett eget exempel."],"answer_key":"1. slang/abbreviation examples from the text. 2. A polite, formal rewrite. 3. Language is adapted to receiver, purpose and situation; any reasonable example."}`},
 };
+
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -177,7 +171,6 @@ async function generateAssignment(key:string):Promise<Assign>{
   const json=JSON.parse(extractJson(raw));
   const a={...json,type}as Assign;
   if(a.words)a.words=[...a.words].sort(()=>Math.random()-0.5);
-  if(a.type==="reorder_sentences"&&a.sentences)a.sentences=[...a.sentences].sort(()=>Math.random()-0.5);
   return a;
 }
 
@@ -287,6 +280,37 @@ function ConjugateView({verbs,onChange}:{verbs:string[];onChange:(s:string)=>voi
   );
 }
 
+function VerbWorkoutView({a,onChange}:{a:Assign;onChange:(s:string)=>void}){
+  const [found,setFound]=useState("");
+  const [conj,setConj]=useState("");
+  const [past,setPast]=useState<string[]>((a.sentences??[]).map(()=>""));
+  function emit(f:string,c:string,p:string[]){
+    onChange(`DEL 1 – Verb jag hittade: ${f||"(inget)"}\nDEL 2 – Böjning:\n${c||"(inget)"}\nDEL 3 – Preteritum:\n${(a.sentences??[]).map((s,i)=>`${i+1}. ${s} → ${p[i]||"(inget)"}`).join("\n")}`);
+  }
+  return(
+    <div className="flex flex-col gap-6">
+      <section className="flex flex-col gap-2">
+        <span className="font-pixel text-[8px] text-muted-foreground">DEL 1 · HITTA VERBEN</span>
+        {a.text&&<CircleVerbView text={a.text} onChange={v=>{setFound(v);emit(v,conj,past);}}/>}
+      </section>
+      <section className="flex flex-col gap-2">
+        <span className="font-pixel text-[8px] text-muted-foreground">DEL 2 · BÖJ VERBEN</span>
+        {a.verbs&&<ConjugateView verbs={a.verbs} onChange={v=>{setConj(v);emit(found,v,past);}}/>}
+      </section>
+      <section className="flex flex-col gap-2">
+        <span className="font-pixel text-[8px] text-muted-foreground">DEL 3 · SKRIV I DÅTID (PRETERITUM)</span>
+        {(a.sentences??[]).map((s,i)=>(
+          <label key={i} className="flex flex-col gap-1">
+            <span className="text-lg">{i+1}. {s}</span>
+            <input value={past[i]} onChange={e=>{const n=[...past];n[i]=e.target.value;setPast(n);emit(found,conj,n);}} placeholder="Skriv meningen i dåtid…" {...noCorr}
+              className="rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring"/>
+          </label>
+        ))}
+      </section>
+    </div>
+  );
+}
+
 // ── Grade matrix ──────────────────────────────────────────────────────────────
 
 const GRADE_COLORS:Record<LG,string>={A:"bg-success text-success-foreground",B:"bg-success/70 text-success-foreground",C:"bg-primary text-primary-foreground",D:"bg-warn text-warn-foreground",E:"bg-accent text-accent-foreground",F:"bg-destructive text-destructive-foreground"};
@@ -374,7 +398,7 @@ function GradeMatrix({prog}:{prog:Progress}){
 // ── Assignment renderer ───────────────────────────────────────────────────────
 
 function AssignmentView({a,onAnswer}:{a:Assign;onAnswer:(s:string)=>void}){
-  const interactive=["circle_verb","en_ett","fill_blank","reading_comprehension","kallkritik","conjugate_verbs","summarize"].includes(a.type);
+  const interactive=["verbs","en_ett","fill_blank","reading_comprehension","kallkritik","analyze_fiction","language_use","summarize"].includes(a.type);
   return(
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -387,21 +411,20 @@ function AssignmentView({a,onAnswer}:{a:Assign;onAnswer:(s:string)=>void}){
       {["correct_mistakes","correct_punctuation","word_class"].includes(a.type)&&a.text&&(
         <div className="rounded-sm bg-chalk p-4 text-chalk-foreground text-lg leading-relaxed whitespace-pre-wrap">{a.text}</div>
       )}
-      {["translate_sentences","reorder_sentences","plural_forms","past_tense"].includes(a.type)&&a.sentences&&(
+      {["translate_sentences","plural_forms"].includes(a.type)&&a.sentences&&(
         <ol className="flex flex-col gap-2 pl-4">{a.sentences.map((s,i)=><li key={i} className="text-lg list-decimal">{s}</li>)}</ol>
       )}
-      {["word_class","find_synonyms"].includes(a.type)&&a.words&&(
+      {["word_class"].includes(a.type)&&a.words&&(
         <ul className="flex flex-wrap gap-2">{a.words.map((w,i)=><li key={i} className="rounded-sm border-2 border-border bg-secondary/40 px-3 py-1 text-lg">{w}</li>)}</ul>
       )}
       {a.prompt&&(
         <div className="rounded-sm border-l-4 border-accent bg-secondary/40 px-4 py-3 text-lg italic">{a.prompt}</div>
       )}
 
-      {a.type==="circle_verb"&&a.text&&<CircleVerbView text={a.text} onChange={onAnswer}/>}
+      {a.type==="verbs"&&<VerbWorkoutView a={a} onChange={onAnswer}/>}
       {a.type==="en_ett"&&a.words&&<EnEttView words={a.words} onChange={onAnswer}/>}
       {a.type==="fill_blank"&&a.text_with_blanks&&a.word_bank&&<FillBlankView textWithBlanks={a.text_with_blanks} wordBank={a.word_bank} onChange={onAnswer}/>}
-      {(a.type==="reading_comprehension"||a.type==="kallkritik"||a.type==="summarize")&&a.questions&&<QuestionsView text={a.text} questions={a.questions} onChange={onAnswer}/>}
-      {a.type==="conjugate_verbs"&&a.verbs&&<ConjugateView verbs={a.verbs} onChange={onAnswer}/>}
+      {(a.type==="reading_comprehension"||a.type==="kallkritik"||a.type==="summarize"||a.type==="analyze_fiction"||a.type==="language_use")&&a.questions&&<QuestionsView text={a.text} questions={a.questions} onChange={onAnswer}/>}
 
       {!interactive&&(
         <textarea onChange={e=>onAnswer(e.target.value)} placeholder="Skriv ditt svar här…" rows={8} {...noCorr}
@@ -587,7 +610,7 @@ RULES:
               {genLoad?"GENERERAR…":assignment?"NY UPPGIFT":"STARTA LEKTION"}
             </button>
           </div>
-          {!assignment&&!genLoad&&<p className="text-muted-foreground">Tryck "Starta lektion" för att få en uppgift. Varje uppgift är unik och genereras på Y7/8-nivå.</p>}
+          {!assignment&&!genLoad&&<p className="text-muted-foreground">Tryck "Starta lektion" för att få en uppgift. Varje uppgift är unik och genereras på årskurs 7-nivå.</p>}
           {genLoad&&<p className="animate-pulse font-pixel text-[9px] text-muted-foreground">Läraren förbereder uppgiften…</p>}
           {genErr&&<p className="font-pixel text-[9px] text-destructive">✗ {genErr}</p>}
           {assignment&&!genLoad&&<AssignmentView a={assignment} onAnswer={setAnswer}/>}
