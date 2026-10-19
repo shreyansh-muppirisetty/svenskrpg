@@ -107,6 +107,14 @@ export function SlideView({ slide, themeId, className = "" }: { slide: Slide; th
 
 // ── Full-screen slideshow ─────────────────────────────────────────────────────
 
+type FsElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+type FsDocument = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
+
+function fullscreenActive(): boolean {
+  const d = document as FsDocument;
+  return !!(d.fullscreenElement ?? d.webkitFullscreenElement);
+}
+
 export function SlideShow({
   presentation, onExit, onSlideChange, extra, finishLabel, onFinish,
 }: {
@@ -120,6 +128,11 @@ export function SlideShow({
 }) {
   const [i, setI] = useState(0);
   const [notes, setNotes] = useState(false);
+  const [isFs, setIsFs] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const enteredRef = useRef(false);
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
   const last = presentation.slides.length - 1;
   const slide = presentation.slides[Math.min(i, last)];
 
@@ -129,9 +142,49 @@ export function SlideShow({
     onSlideChange?.(next);
   }
 
+  async function enterFullscreen() {
+    const el = rootRef.current as FsElement | null;
+    if (!el || fullscreenActive()) return;
+    try {
+      if (el.requestFullscreen) await el.requestFullscreen();
+      else await el.webkitRequestFullscreen?.();
+    } catch {
+      /* the browser refused (for example iPhone Safari); the overlay still fills the window */
+    }
+  }
+
   useEffect(() => {
     onSlideChange?.(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Go full screen as soon as the show starts, and end the show if the pupil leaves full screen (Esc).
+  useEffect(() => {
+    function onChange() {
+      const active = fullscreenActive();
+      setIsFs(active);
+      if (active) enteredRef.current = true;
+      else if (enteredRef.current) {
+        enteredRef.current = false;
+        onExitRef.current();
+      }
+    }
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    void enterFullscreen();
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+      enteredRef.current = false;
+      const d = document as FsDocument;
+      if (fullscreenActive()) {
+        try {
+          void (document.exitFullscreen ? document.exitFullscreen() : d.webkitExitFullscreen?.());
+        } catch {
+          /* already left full screen */
+        }
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -147,11 +200,12 @@ export function SlideShow({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col gap-3 bg-black/95 p-3 sm:p-6">
+    <div ref={rootRef} className="fixed inset-0 z-50 flex flex-col gap-3 bg-black p-3 sm:p-6">
       <div className="flex items-center justify-between gap-2">
         <span className="font-pixel text-[9px] text-white/80">{Math.min(i, last) + 1} / {last + 1}</span>
         <div className="flex items-center gap-2">
           {extra}
+          {!isFs && <button onClick={() => void enterFullscreen()} className={btn}>FULLSKÄRM</button>}
           <button onClick={() => setNotes((n) => !n)} className={btn}>{notes ? "DÖLJ STÖD" : "VISA STÖD"}</button>
           <button onClick={onExit} className={btn}>AVSLUTA</button>
         </div>
