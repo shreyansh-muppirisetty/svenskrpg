@@ -4,6 +4,7 @@ import { DictionaryPanel } from "@/components/DictionaryPanel";
 import { detectAndSaveEnEtt } from "@/lib/enellerett";
 import { OralTask } from "@/components/OralTask";
 import { oralAssessmentPrompt, year7AssessmentPrompt } from "@/lib/classroom-assessment";
+import { pickAssignmentType } from "@/lib/assignment-pick";
 import { isOralType } from "@/lib/oral";
 import { punctuationAssignmentPrompt, punctuationGuidance } from "@/lib/classroom-punctuation";
 import { playerIdentityPrompt } from "@/lib/player-profile";
@@ -178,8 +179,8 @@ async function geminiChat(key:string,sys:string,history:Msg[],text:string):Promi
   return d.candidates?.[0]?.content?.parts?.[0]?.text??"(inget svar)";
 }
 
-async function generateAssignment(key:string):Promise<Assign>{
-  const type=ALL_TYPES[Math.floor(Math.random()*ALL_TYPES.length)];
+async function generateAssignment(key:string,recent:string[]=[]):Promise<Assign>{
+  const type=pickAssignmentType(ALL_TYPES,recent);
   const raw=await geminiRaw(key,TMETA[type].gen,1600);
   const json=JSON.parse(extractJson(raw));
   const a={...json,type}as Assign;
@@ -491,7 +492,7 @@ export function ClassroomMode({onExit}:{onExit:()=>void}){
   async function newAssignment(){
     if(!key)return;
     setGenLoad(true);setGenErr("");setAnswer("");setMsgs([]);
-    try{setAssignment(await generateAssignment(key));}
+    try{setAssignment(await generateAssignment(key,[...prog.grades.map(g=>g.type),...(assignment?[assignment.type]:[])]));}
     catch(e){setGenErr(e instanceof Error?e.message:"Kunde inte skapa uppgift");}
     finally{setGenLoad(false);}
   }
