@@ -12,6 +12,35 @@ const btnPrimary = "rounded-sm border-2 border-border bg-primary px-3 py-1.5 fon
 const btnAccent = "rounded-sm border-2 border-border bg-accent px-3 py-1.5 font-pixel text-[9px] text-accent-foreground shadow-pixel-sm active:translate-y-0.5 active:shadow-none disabled:opacity-40";
 const input = "rounded-sm border-2 border-border bg-secondary/50 px-3 py-2 text-base outline-none focus:border-ring";
 
+type FsElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+type FsDocument = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
+
+function fullscreenActive(): boolean {
+  const d = document as FsDocument;
+  return !!(d.fullscreenElement ?? d.webkitFullscreenElement);
+}
+/** Fullscreen is requested for the whole page, so it stays on when the editor switches to the slideshow and back. */
+async function enterBrowserFullscreen() {
+  if (fullscreenActive()) return;
+  const el = document.documentElement as FsElement;
+  try {
+    if (el.requestFullscreen) await el.requestFullscreen();
+    else await el.webkitRequestFullscreen?.();
+  } catch {
+    /* refused by the browser (for example iPhone Safari); the editor still fills the window */
+  }
+}
+async function exitBrowserFullscreen() {
+  if (!fullscreenActive()) return;
+  const d = document as FsDocument;
+  try {
+    if (d.exitFullscreen) await d.exitFullscreen();
+    else await d.webkitExitFullscreen?.();
+  } catch {
+    /* already left */
+  }
+}
+
 // ── One slide, drawn at 16:9 and scaled with its container ────────────────────
 
 export function SlideView({ slide, themeId, className = "" }: { slide: Slide; themeId: ThemeId; className?: string }) {
@@ -215,8 +244,10 @@ function readImage(file: File): Promise<string> {
 // ── Editor ────────────────────────────────────────────────────────────────────
 
 function Editor({
-  p, onChange, onClose, onPresent, onPick, pickLabel,
+  p, onChange, onClose, onPresent, onPick, pickLabel, fullscreen, onToggleFullscreen,
 }: {
+  fullscreen: boolean;
+  onToggleFullscreen: () => void;
   p: Presentation;
   onChange: (p: Presentation) => void;
   onClose: () => void;
@@ -248,6 +279,7 @@ function Editor({
       <div className="flex flex-wrap items-center gap-2">
         <input value={p.title} onChange={(e) => onChange({ ...p, title: e.target.value, updatedAt: Date.now() })} {...noCorr}
           aria-label="Titel på presentationen" className={`${input} min-w-0 flex-1 font-bold`} />
+        <button onClick={onToggleFullscreen} className={btn}>{fullscreen ? "AVSLUTA FULLSKÄRM" : "FULLSKÄRM"}</button>
         <button onClick={onPresent} className={btnAccent}>▶ PRESENTERA</button>
         {onPick && <button onClick={() => onPick(p)} className={btnPrimary}>{pickLabel ?? "ANVÄND"}</button>}
         <button onClick={onClose} className={btn}>KLAR</button>
@@ -266,8 +298,8 @@ function Editor({
         <span className="ml-auto font-pixel text-[8px] text-muted-foreground">{p.slides.length} BILDER · {wordCount(p)} ORD</span>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[170px_1fr]">
-        <div className="flex gap-2 overflow-x-auto md:max-h-[34rem] md:flex-col md:overflow-y-auto md:overflow-x-visible">
+      <div className="grid gap-4 md:grid-cols-[190px_1fr]">
+        <div className="flex gap-2 overflow-x-auto md:max-h-[calc(100vh-11rem)] md:flex-col md:overflow-y-auto md:overflow-x-visible">
           {p.slides.map((s, i) => (
             <button key={s.id} onClick={() => setIdx(i)}
               className={`w-36 shrink-0 rounded-sm border-2 p-1 text-left md:w-full ${i === cur ? "border-ring bg-secondary" : "border-border"}`}>
@@ -277,7 +309,8 @@ function Editor({
           ))}
         </div>
 
-        <div className="flex min-w-0 flex-col gap-3">
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="flex min-w-0 flex-col gap-3">
           <SlideView slide={slide} themeId={p.themeId} />
 
           <div className="flex flex-wrap gap-1.5">
@@ -287,6 +320,19 @@ function Editor({
             <button onClick={() => { onChange(removeSlide(p, cur)); setIdx(Math.max(0, cur - 1)); }} disabled={p.slides.length <= 1} className={btn}>TA BORT</button>
           </div>
 
+          <div className="flex flex-col gap-1">
+            <span className="font-pixel text-[8px] text-muted-foreground">LÄGG TILL NY BILD EFTER DEN HÄR</span>
+            <div className="flex flex-wrap gap-1.5">
+              {LAYOUTS.map((l) => (
+                <button key={l.id} disabled={p.slides.length >= MAX_SLIDES}
+                  onClick={() => { onChange(addSlide(p, l.id, cur)); setIdx(cur + 1); }} className={btn} title={l.description}>
+                  + {l.name.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          </div>
+          <div className="flex min-w-0 flex-col gap-3">
           <label className="flex flex-col gap-1">
             <span className="font-pixel text-[8px] text-muted-foreground">UTSEENDE PÅ DEN HÄR BILDEN</span>
             <select value={slide.layout} onChange={(e) => onChange(updateSlide(p, cur, { layout: e.target.value as SlideLayout }))} className={input}>
@@ -329,17 +375,6 @@ function Editor({
             <textarea value={slide.notes} rows={3} onChange={(e) => onChange(updateSlide(p, cur, { notes: e.target.value }))} {...noCorr}
               placeholder="Stödord eller det du vill komma ihåg att säga…" className={`${input} resize-none`} />
           </label>
-
-          <div className="flex flex-col gap-1">
-            <span className="font-pixel text-[8px] text-muted-foreground">LÄGG TILL NY BILD EFTER DEN HÄR</span>
-            <div className="flex flex-wrap gap-1.5">
-              {LAYOUTS.map((l) => (
-                <button key={l.id} disabled={p.slides.length >= MAX_SLIDES}
-                  onClick={() => { onChange(addSlide(p, l.id, cur)); setIdx(cur + 1); }} className={btn} title={l.description}>
-                  + {l.name.toUpperCase()}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -380,6 +415,24 @@ export function PresentationMaker({
   }
 
   const open = list.find((x) => x.id === openId) ?? null;
+  const editing = open !== null;
+  const [fs, setFs] = useState(false);
+
+  // The editor takes over the whole screen (and the browser goes fullscreen) while a presentation is open.
+  useEffect(() => {
+    const on = () => setFs(fullscreenActive());
+    document.addEventListener("fullscreenchange", on);
+    document.addEventListener("webkitfullscreenchange", on);
+    return () => {
+      document.removeEventListener("fullscreenchange", on);
+      document.removeEventListener("webkitfullscreenchange", on);
+    };
+  }, []);
+  useEffect(() => {
+    if (!editing) return;
+    void enterBrowserFullscreen();
+    return () => { void exitBrowserFullscreen(); };
+  }, [editing]);
 
   if (open && showing) return <SlideShow presentation={open} onExit={() => setShowing(false)} />;
 
@@ -399,8 +452,11 @@ export function PresentationMaker({
       )}
 
       {open ? (
-        <div className="pixel-panel rounded-sm bg-card p-4">
-          <Editor p={open} onChange={change} onClose={() => setOpenId(null)} onPresent={() => setShowing(true)} onPick={onPick} pickLabel={pickLabel} />
+        <div className="fixed inset-0 z-40 overflow-y-auto bg-background p-3 sm:p-5">
+          <div className="pixel-panel mx-auto max-w-[110rem] rounded-sm bg-card p-4">
+            <Editor p={open} onChange={change} onClose={() => setOpenId(null)} onPresent={() => setShowing(true)} onPick={onPick} pickLabel={pickLabel}
+              fullscreen={fs} onToggleFullscreen={() => void (fs ? exitBrowserFullscreen() : enterBrowserFullscreen())} />
+          </div>
         </div>
       ) : (
         <>
