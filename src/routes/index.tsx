@@ -8,7 +8,6 @@ import { ClassBook } from "@/components/ClassBook";
 import { HardWords } from "@/components/HardWords";
 import { EnEllerEtt } from "@/components/EnEllerEtt";
 import { WhatsAppMode } from "@/components/WhatsAppMode";
-import { PresentationMaker } from "@/components/PresentationMaker";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,7 +23,7 @@ export const Route = createFileRoute("/")({
   component: Game,
 });
 
-type Screen = { view: "map" } | { view: "classroom" } | { view: "classbook" } | { view: "hardwords" } | { view: "enellerett" } | { view: "whatsapp" } | { view: "presentation" };
+type Screen = { view: "map" } | { view: "classroom" } | { view: "classbook" } | { view: "hardwords" } | { view: "enellerett" } | { view: "whatsapp" };
 
 function Game() {
   const [screen, setScreen] = useState<Screen>({ view: "map" });
@@ -64,7 +63,6 @@ function Game() {
           onHardWords={() => setScreen({ view: "hardwords" })}
           onEnEllerEtt={() => setScreen({ view: "enellerett" })}
           onWhatsApp={() => setScreen({ view: "whatsapp" })}
-          onPresentation={() => setScreen({ view: "presentation" })}
         />
       ) : screen.view === "classroom" ? (
         <ClassroomMode onExit={() => setScreen({ view: "map" })} />
@@ -74,20 +72,18 @@ function Game() {
         <HardWords onExit={() => setScreen({ view: "map" })} />
       ) : screen.view === "enellerett" ? (
         <EnEllerEtt onExit={() => setScreen({ view: "map" })} />
-      ) : screen.view === "presentation" ? (
-        <PresentationMaker onExit={() => setScreen({ view: "map" })} />
       ) : (
         <WhatsAppMode onExit={() => setScreen({ view: "map" })} />
       )}
 
       <footer className="mt-auto pt-4 font-pixel text-[9px] leading-relaxed text-muted-foreground">
-        klassrumsläge · klassbok · ordbok · presentationer · uppgifter · betygsmatris
+        klassrumsläge · klassbok · ordbok · uppgifter · betygsmatris
       </footer>
     </main>
   );
 }
 
-function MapScreen({ onClassroom, onClassBook, onHardWords, onEnEllerEtt, onWhatsApp, onPresentation }: { onClassroom: () => void; onClassBook: () => void; onHardWords: () => void; onEnEllerEtt: () => void; onWhatsApp: () => void; onPresentation: () => void }) {
+function MapScreen({ onClassroom, onClassBook, onHardWords, onEnEllerEtt, onWhatsApp }: { onClassroom: () => void; onClassBook: () => void; onHardWords: () => void; onEnEllerEtt: () => void; onWhatsApp: () => void;}) {
   return (
     <div className="flex flex-col gap-3">
       <section className="pixel-panel rounded-sm bg-chalk p-5 text-chalk-foreground">
@@ -164,20 +160,6 @@ function MapScreen({ onClassroom, onClassBook, onHardWords, onEnEllerEtt, onWhat
             <span className="rounded-sm bg-accent px-1.5 py-0.5 font-pixel text-[7px] text-accent-foreground">BETA</span>
           </span>
           <span className="block text-lg text-muted-foreground">Chatta med Johnny, Jacob, Sam och klassen.</span>
-        </span>
-        <span className="font-pixel text-xl text-accent-foreground">→</span>
-      </button>
-      <button
-        onClick={onPresentation}
-        className="pixel-panel flex items-center gap-4 rounded-sm bg-card p-4 text-left transition-transform active:translate-y-0.5"
-      >
-        <span className="font-pixel text-[10px] text-muted-foreground">🖼️</span>
-        <span className="flex-1">
-          <span className="flex items-center gap-2">
-            <span className="block font-pixel text-[11px] text-foreground">Presentationer</span>
-            <span className="rounded-sm bg-accent px-1.5 py-0.5 font-pixel text-[7px] text-accent-foreground">NY</span>
-          </span>
-          <span className="block text-lg text-muted-foreground">Gör bilder från mallar eller från början och öva att presentera.</span>
         </span>
         <span className="font-pixel text-xl text-accent-foreground">→</span>
       </button>
