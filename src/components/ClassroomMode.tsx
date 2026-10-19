@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { DictionaryPanel } from "@/components/DictionaryPanel";
 import { detectAndSaveEnEtt } from "@/lib/enellerett";
-import { year7AssessmentPrompt } from "@/lib/classroom-assessment";
+import { OralTask } from "@/components/OralTask";
+import { oralAssessmentPrompt, year7AssessmentPrompt } from "@/lib/classroom-assessment";
+import { isOralType } from "@/lib/oral";
 import { punctuationAssignmentPrompt, punctuationGuidance } from "@/lib/classroom-punctuation";
 import { playerIdentityPrompt } from "@/lib/player-profile";
 
@@ -19,6 +21,7 @@ const ALL_TYPES = [
   "kallkritik","fill_blank","translate_sentences","word_class",
   "en_ett","write_letter","argumentative_text","analyze_fiction","language_use",
   "correct_punctuation","summarize","write_dialogue","plural_forms","write_poem",
+  "oral_presentation","oral_speech","oral_story",
 ] as const;
 type AT = (typeof ALL_TYPES)[number];
 type LG = "A"|"B"|"C"|"D"|"E"|"F";
@@ -39,6 +42,7 @@ const CMAP: Record<AT,CK[]> = {
   write_letter:["F1","F3"], argumentative_text:["F1","F3"],
   analyze_fiction:["F2"], language_use:["F3"], correct_punctuation:["F4"],
   summarize:["F2"], write_dialogue:["F1","F3"], plural_forms:["F4"], write_poem:["F1"],
+  oral_presentation:["F1","F3"], oral_speech:["F1","F3"], oral_story:["F1","F3"],
 };
 
 type GradeEntry = { id:string; type:AT|string; title:string; grade:LG; comps:CK[]; term:number; ts:number };
@@ -46,7 +50,7 @@ type Progress = { grades:GradeEntry[]; currentTerm:number };
 type Assign = {
   type:AT; title:string; instructions:string; answer_key:string;
   text?:string; text_with_blanks?:string; words?:string[]; word_bank?:string[];
-  sentences?:string[]; questions?:string[]; verbs?:string[]; prompt?:string;
+  sentences?:string[]; questions?:string[]; verbs?:string[]; prompt?:string; target_seconds?:number;
 };
 type Msg = { role:"user"|"model"; text:string };
 
@@ -135,6 +139,15 @@ const TMETA:Record<AT,{label:string;gen:string}>={
 
   language_use:{label:"Språkbruk",gen:`${LEVEL} Write a short Swedish text (about 60 words) in very informal chat style, with slang, abbreviations and spoken-language features, for example a message from a friend. Add 3 tasks about language use. Return ONLY valid JSON:
 {"type":"language_use","title":"Språkbruk","instructions":"Läs texten och gör uppgifterna. Skriv med egna ord.","text":"THE INFORMAL TEXT","questions":["1. Vilka ord eller uttryck gör att texten känns informell? Ge minst tre exempel.","2. Skriv om texten så att den passar i ett mejl till en lärare.","3. Varför ändrar vi hur vi skriver beroende på vem som läser? Förklara med ett eget exempel."],"answer_key":"1. slang/abbreviation examples from the text. 2. A polite, formal rewrite. 3. Language is adapted to receiver, purpose and situation; any reasonable example."}`},
+
+  oral_presentation:{label:"Muntlig presentation",gen:`${LEVEL} Give the pupil a free oral-presentation task. The pupil makes a short slide presentation (at least 4 slides) in the app's presentation maker and presents it aloud for about 2 minutes. Only ask for that, plus one light extra (a clear beginning and ending). The prompt offers THREE open topic ideas a 13-year-old can talk about (for example a hobby, a place, a person they admire, something from school) and says they may choose their own topic. Return ONLY valid JSON:
+{"type":"oral_presentation","title":"Muntlig presentation","instructions":"Gör en presentation med minst 4 bilder och presentera den muntligt i ungefär 2 minuter. Du väljer själv hur du bygger upp den. Försök ha en tydlig början och ett tydligt slut.","prompt":"Välj ett ämne: 1) ... 2) ... 3) ... Du får också välja ett eget ämne.","target_seconds":120,"answer_key":"Free task. Grade struktur, innehåll and anpassning till mottagaren. Any reasonable topic is fine."}`},
+
+  oral_speech:{label:"Anförande",gen:`${LEVEL} Give the pupil a free oral speech task: a short spoken opinion speech of about 90 seconds on a question that 13-year-olds have opinions about (for example school phones, homework, screen time, school lunches, pocket money). Only ask for an opinion with at least two reasons. Slides are optional. Return ONLY valid JSON:
+{"type":"oral_speech","title":"Håll ett anförande","instructions":"Håll ett anförande på ungefär 90 sekunder där du säger din åsikt och ger minst två skäl. Du får använda bilder om du vill.","prompt":"The debate question","target_seconds":90,"answer_key":"Free task. Grade a clear opinion, reasons backed by examples, struktur and anpassning till lyssnarna."}`},
+
+  oral_story:{label:"Berätta muntligt",gen:`${LEVEL} Give the pupil a free oral storytelling task of about 90 seconds. The prompt is only an open starting situation; the pupil decides everything else, and the story may be true or made up. Return ONLY valid JSON:
+{"type":"oral_story","title":"Berätta en historia","instructions":"Berätta en historia högt i ungefär 90 sekunder. Den får vara sann eller påhittad, och du bestämmer själv hur den slutar.","prompt":"An open starting situation (for example: something unexpected happened on the way to school)","target_seconds":90,"answer_key":"Free task. Grade struktur (början, händelse, slut), innehåll and anpassning till lyssnaren."}`},
 };
 
 
@@ -171,6 +184,7 @@ async function generateAssignment(key:string):Promise<Assign>{
   const json=JSON.parse(extractJson(raw));
   const a={...json,type}as Assign;
   if(a.words)a.words=[...a.words].sort(()=>Math.random()-0.5);
+  if(isOralType(a.type)){const t=Number(a.target_seconds);a.target_seconds=Math.min(240,Math.max(60,Number.isFinite(t)&&t>0?t:(a.type==="oral_presentation"?120:90)));}
   return a;
 }
 
@@ -397,8 +411,8 @@ function GradeMatrix({prog}:{prog:Progress}){
 
 // ── Assignment renderer ───────────────────────────────────────────────────────
 
-function AssignmentView({a,onAnswer}:{a:Assign;onAnswer:(s:string)=>void}){
-  const interactive=["verbs","en_ett","fill_blank","reading_comprehension","kallkritik","analyze_fiction","language_use","summarize"].includes(a.type);
+function AssignmentView({a,onAnswer,onOralSubmit,oralDisabled}:{a:Assign;onAnswer:(s:string)=>void;onOralSubmit:(work:string)=>void;oralDisabled:boolean}){
+  const interactive=["verbs","en_ett","fill_blank","reading_comprehension","kallkritik","analyze_fiction","language_use","summarize"].includes(a.type)||isOralType(a.type);
   return(
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -422,6 +436,7 @@ function AssignmentView({a,onAnswer}:{a:Assign;onAnswer:(s:string)=>void}){
       )}
 
       {a.type==="verbs"&&<VerbWorkoutView a={a} onChange={onAnswer}/>}
+      {isOralType(a.type)&&<OralTask key={a.title+a.type} type={a.type} title={a.title} targetSeconds={a.target_seconds??90} disabled={oralDisabled} onSubmit={onOralSubmit}/>}
       {a.type==="en_ett"&&a.words&&<EnEttView words={a.words} onChange={onAnswer}/>}
       {a.type==="fill_blank"&&a.text_with_blanks&&a.word_bank&&<FillBlankView textWithBlanks={a.text_with_blanks} wordBank={a.word_bank} onChange={onAnswer}/>}
       {(a.type==="reading_comprehension"||a.type==="kallkritik"||a.type==="summarize"||a.type==="analyze_fiction"||a.type==="language_use")&&a.questions&&<QuestionsView text={a.text} questions={a.questions} onChange={onAnswer}/>}
@@ -481,12 +496,13 @@ export function ClassroomMode({onExit}:{onExit:()=>void}){
     finally{setGenLoad(false);}
   }
 
-  function teacherSys(){
+  function teacherSys(work?:string){
     if(!assignment)return"";
     return`You are Läraren, a firm but fair Swedish teacher for årskurs 7 (13-year-olds). You grade exactly the way Skolverket instructs: a holistic judgement against the betygskriterier, giving the grade that best matches the pupil's knowledge — neither generous nor harsh.
 
 ${year7AssessmentPrompt()}
 ${assignment.type === "correct_punctuation" ? punctuationGuidance() : ""}
+${isOralType(assignment.type) ? oralAssessmentPrompt() : ""}
 
 ASSIGNMENT:
 Type: ${TMETA[assignment.type].label}
@@ -500,10 +516,11 @@ ${assignment.word_bank?`Word bank: ${assignment.word_bank.join(", ")}`:""}
 ${assignment.text_with_blanks?`Text with blanks: ${assignment.text_with_blanks}`:""}
 ${assignment.questions?`Questions: ${assignment.questions.join(" | ")}`:""}
 ${assignment.prompt?`Prompt: ${assignment.prompt}`:""}
+${assignment.target_seconds?`Target length: ${assignment.target_seconds} seconds`:""}
 ANSWER KEY (secret — only use for grading): ${assignment.answer_key}
 
 STUDENT'S WORK:
-${answer||(msgs.length?"(se tidigare svar)":"(inget svar ännu)")}
+${(work??answer)||(msgs.length?"(se tidigare svar)":"(inget svar ännu)")}
 
 RULES:
 - Speak Swedish. Use English only if student writes in English.
@@ -514,18 +531,18 @@ RULES:
 - Keep responses focused (max 8 sentences unless grading).`;
   }
 
-  async function sendChat(text:string){
+  async function sendChat(text:string,work?:string){
     if(!text.trim()||chatLoad||!key)return;
     setChatIn("");
     const next:Msg[]=[...msgs,{role:"user",text:text.trim()}];
     setMsgs(next);setChatLoad(true);
     try{
-      const reply=await geminiChat(key,teacherSys(),msgs,text.trim());
+      const reply=await geminiChat(key,teacherSys(work),msgs,text.trim());
       setMsgs([...next,{role:"model",text:reply}]);
       // Extract grade if present
       const gm=reply.match(/\[BETYG:\s*([ABCDEF])\]/);
       if(gm&&assignment){
-        detectAndSaveEnEtt(key, text.trim()); // fire-and-forget
+        if(!isOralType(assignment.type))detectAndSaveEnEtt(key, text.trim()); // fire-and-forget
         const grade=gm[1] as LG;
         const entry:GradeEntry={
           id:Date.now().toString(),type:assignment.type,title:assignment.title,
@@ -540,6 +557,11 @@ RULES:
       }
     }catch(e){setMsgs([...next,{role:"model",text:`⚠️ ${e instanceof Error?e.message:"Fel"}`}]);}
     finally{setChatLoad(false);setTimeout(()=>chatRef.current?.focus(),50);}
+  }
+
+  function submitOral(work:string){
+    setAnswer(work);
+    sendChat("Jag har gjort klart min muntliga uppgift. Sätt ett betyg 🎓",work);
   }
 
   const hasKey=!!key&&keyStatus!=="fail";
@@ -613,7 +635,7 @@ RULES:
           {!assignment&&!genLoad&&<p className="text-muted-foreground">Tryck "Starta lektion" för att få en uppgift. Varje uppgift är unik och genereras på årskurs 7-nivå.</p>}
           {genLoad&&<p className="animate-pulse font-pixel text-[9px] text-muted-foreground">Läraren förbereder uppgiften…</p>}
           {genErr&&<p className="font-pixel text-[9px] text-destructive">✗ {genErr}</p>}
-          {assignment&&!genLoad&&<AssignmentView a={assignment} onAnswer={setAnswer}/>}
+          {assignment&&!genLoad&&<AssignmentView a={assignment} onAnswer={setAnswer} onOralSubmit={submitOral} oralDisabled={chatLoad}/>}
         </div>
       )}
 

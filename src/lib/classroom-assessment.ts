@@ -110,3 +110,23 @@ YEAR 7 CALIBRATION (our interpretation of the value words for a 13-year-old):
 - Too little to assess (almost nothing submitted) is NOT automatically F: ask for the missing work and do not emit a grade marker.
 - Feedback: say the grade, explain it with the value words (which criteria, at which level, and what separates it from the next grade up), name the one or two most useful errors with the correct form, and end with one concrete next step. Honest and encouraging, never invent evidence.`;
 }
+
+/** Added to the teacher's instructions for oral (muntliga) assignments. */
+export function oralAssessmentPrompt(): string {
+  return `ORAL TASK — HOW TO ASSESS IT HERE:
+Skolverket's betygskriterier for muntliga framställningar (slutet av årskurs 9, the goal for årskurs 7):
+- E: Eleven framför åsikter med till viss del underbyggda argument. Dessutom förbereder och genomför eleven muntliga framställningar med i huvudsak fungerande struktur och innehåll och viss anpassning till syfte, mottagare och sammanhang.
+- C: Eleven framför åsikter med relativt väl underbyggda argument. Dessutom förbereder och genomför eleven muntliga framställningar med fungerande struktur och innehåll och relativt god anpassning till syfte, mottagare och sammanhang.
+- A: Eleven framför åsikter med väl underbyggda argument. Dessutom förbereder och genomför eleven muntliga framställningar med väl fungerande struktur och innehåll och god anpassning till syfte, mottagare och sammanhang.
+Central content (årskurs 7–9): muntliga presentationer och muntligt berättande för olika mottagare; anpassning av språk, innehåll och disposition till syfte, mottagare och sammanhang; talmanus och olika verktyg (med eller utan digital teknik) för att planera och genomföra.
+(Skolverket's criteria for samtal and diskussion are not assessed here: this is a prepared presentation, speech or story.)
+
+RULES FOR THIS ORAL TASK:
+- The evidence is: an automatic speech-to-text TRANSCRIPT, the slide contents (if any), the time used and the speaking pace. The transcript has no punctuation or paragraphs and can contain recognition errors (wrong words, names, missing words). These are NOT the pupil's mistakes: do not assess spelling or punctuation, and do not count misheard words as language errors. If a passage makes no sense because it is probably misheard, ignore it.
+- Assess: struktur (inledning, innehåll, avslutning), innehåll (relevant, enough substance, examples), anpassning till syfte och mottagare (does the pupil speak to an audience, with suitable language), språklig variation and clarity as far as the transcript shows it, and for opinion tasks whether the reasons are underbyggda with examples. Slides are a support: judge whether they help the talk, not how pretty they look; reading slide text out word by word is weaker than explaining it.
+- Voice, intonation, volume, eye contact and body language cannot be assessed here. Say so in one sentence in your feedback. Do not guess about them and do not lower the grade for them.
+- Time: within about 70–130 % of the target time fits. Clearly too short means less evidence of structure and content: mention it and let it affect those aspects honestly, without an automatic ceiling. Pace is only a gentle remark (about 110–170 words per minute is normal); the transcript cannot show pauses.
+- If the transcript is empty or only a few words, ask the pupil to do it again and do NOT give a grade marker.
+- Apply the same procedure, the year-7 calibration and the same rule as for written work: a holistic judgement, every grade A–F given exactly as deserved, and the value words used in the explanation.
+- Feedback: the grade explained with the value words, one real strength, one concrete thing to improve next time (for example a stronger opening, a clearer ending, or linking each reason to an example), and what could not be assessed.`;
+}

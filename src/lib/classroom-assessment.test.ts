@@ -65,3 +65,22 @@ describe("årskurs 7 follows Skolverket's terminsbetyg guidance", () => {
     assert.doesNotMatch(prompt, /Never give D|D is rare|rarely give D/i);
   });
 });
+
+import { oralAssessmentPrompt } from "./classroom-assessment";
+
+describe("oral assessment follows Skolverket's criteria", () => {
+  it("quotes the official oral criteria and the value words", () => {
+    const p = oralAssessmentPrompt();
+    assert.match(p, /i huvudsak fungerande struktur och innehåll och viss anpassning till syfte, mottagare och sammanhang/);
+    assert.match(p, /fungerande struktur och innehåll och relativt god anpassning/);
+    assert.match(p, /väl fungerande struktur och innehåll och god anpassning/);
+    assert.match(p, /underbyggda argument/);
+  });
+  it("does not blame the pupil for recognition errors or for what cannot be heard", () => {
+    const p = oralAssessmentPrompt();
+    assert.match(p, /NOT the pupil's mistakes/);
+    assert.match(p, /cannot be assessed here/);
+    assert.match(p, /do NOT give a grade marker/);
+    assert.match(p, /every grade A–F given exactly as deserved/);
+  });
+});
